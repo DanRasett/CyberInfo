@@ -302,11 +302,13 @@ const hostStatus = (host: SmartShellHost, session: SmartShellClientSession | nul
 };
 
 const isInfiniteSessionHost = (host: SmartShellHost) => {
-  const mode = String(host.shell_mode ?? '').toLowerCase();
+  const mode = String(host.shell_mode ?? '').toUpperCase();
   const comment = String(host.comment ?? '').toLowerCase();
   const text = `${mode} ${comment}`;
 
   return (
+    mode === 'DISABLED' ||
+    mode === 'HIGH_ACCESS' ||
     host.locked === true ||
     text.includes('shell') ||
     text.includes('high') ||
