@@ -7,48 +7,44 @@ import {
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import { getDetailedWorkers, PcSeat } from './src/smartshell';
 
-const MAP_SCALE = 0.92;
-const SCROLL_STORAGE_KEY = 'cyberstreet-scroll-y';
 const REFRESH_INTERVAL_MS = 30000;
 
 const statusText: Record<PcSeat['status'], string> = {
   free: 'Свободен',
-  busy: 'Активен',
+  busy: 'Занят',
   reserved: 'Бронь',
   offline: 'Недоступен',
 };
 
 const standardHourly = [
   { label: 'Будни', one: '90 ₽', three: '240 ₽', five: '350 ₽' },
-  { label: 'Выходные (пт - вс)', one: '100 ₽', three: '270 ₽', five: '370 ₽' },
+  { label: 'Пт - Вс', one: '100 ₽', three: '270 ₽', five: '370 ₽' },
 ];
 
 const bootcampHourly = [
   { label: 'Будни', one: '110 ₽', three: '270 ₽', five: '390 ₽' },
-  { label: 'Выходные (пт - вс)', one: '120 ₽', three: '320 ₽', five: '420 ₽' },
+  { label: 'Пт - Вс', one: '120 ₽', three: '320 ₽', five: '420 ₽' },
 ];
 
 const standardPacks = [
   { label: 'Будни', day: '400 ₽', night: '350 ₽' },
-  { label: 'Выходные (пт - вс)', day: '500 ₽', night: '400 ₽' },
+  { label: 'Пт - Вс', day: '500 ₽', night: '400 ₽' },
 ];
 
 const bootcampPacks = [
   { label: 'Будни', day: '600 ₽', night: '500 ₽' },
-  { label: 'Выходные (пт - вс)', day: '700 ₽', night: '550 ₽' },
+  { label: 'Пт - Вс', day: '700 ₽', night: '550 ₽' },
 ];
 
 const promoBlocks = [
-  { title: 'Лототрон', text: 'Пополни депозит на 400 ₽ и крути барабан с призами', accent: 'red' },
-  { title: '+100 ₽', text: 'Новым клиентам пополним баланс от 200 ₽', accent: 'red' },
-  { title: 'Баланс x2', text: 'В день рождения удвоим твой баланс', accent: 'red' },
-  { title: 'Кибер утро ПН-ПТ 8:00 - 14:00', text: '1 час = 60/80 ₽', accent: 'blue' },
-  { title: 'Кибер ПН 21:30 - 08:00 Standard', text: '300 ₽', accent: 'blue' },
-  { title: 'Кибер ПН 21:30 - 08:00 Bootcamp', text: '400 ₽', accent: 'blue' },
-  { title: 'Акция', text: 'Час игры за отзыв на 2ГИС/Яндекс Карты', accent: 'red' },
+  { title: 'Лототрон', text: 'Пополнение от 400 ₽ дает вращение барабана с призами', tone: 'warm' },
+  { title: '+100 ₽ новым', text: 'Бонус при первом пополнении от 200 ₽', tone: 'cool' },
+  { title: 'Баланс x2', text: 'В день рождения удваивается сумма пополнения', tone: 'warm' },
+  { title: 'Утро Пн-Пт', text: 'С 08:00 до 14:00 стоимость от 60 ₽ в час', tone: 'cool' },
 ];
 
 const mapPositions: Record<number, { left: number; top: number }> = {
@@ -115,22 +111,44 @@ const formatBookingTime = (value: string | null) => {
   const date = new Date(value.replace(' ', 'T'));
   if (Number.isNaN(date.getTime())) return '';
 
-  const day = date.getDate().toString().padStart(2, '0');
-  const month = (date.getMonth() + 1).toString().padStart(2, '0');
-  const hours = date.getHours().toString().padStart(2, '0');
-  const minutes = date.getMinutes().toString().padStart(2, '0');
-
-  return `${day}.${month} ${hours}:${minutes}`;
+  return new Intl.DateTimeFormat('ru-RU', {
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date);
 };
 
+const formatClock = (value: Date) =>
+  new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit' }).format(value);
+
+const formatDate = (value: Date) =>
+  new Intl.DateTimeFormat('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' }).format(value);
+
+const formatTimestamp = (value: Date | null) =>
+  value
+    ? new Intl.DateTimeFormat('ru-RU', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+      }).format(value)
+    : 'нет данных';
+
+const accentToneStyle = {
+  cool: styles.promoCool,
+  warm: styles.promoWarm,
+} as const;
+
 const App = () => {
+  const { width, height } = useWindowDimensions();
   const [seats, setSeats] = useState<PcSeat[]>([]);
   const [isLoading, setLoading] = useState(true);
-  const [initialScrollY, setInitialScrollY] = useState(0);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
+  const [now, setNow] = useState(() => new Date());
 
   useEffect(() => {
-    const savedScrollY = Number(window.localStorage.getItem(SCROLL_STORAGE_KEY) ?? 0);
-    if (Number.isFinite(savedScrollY)) setInitialScrollY(savedScrollY);
+    const timer = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(timer);
   }, []);
 
   useEffect(() => {
@@ -141,14 +159,22 @@ const App = () => {
 
       try {
         const nextSeats = await getDetailedWorkers();
-        if (mounted) setSeats(nextSeats);
+        if (mounted) {
+          setSeats(nextSeats);
+          setLastUpdatedAt(new Date());
+        }
       } finally {
         if (mounted) setLoading(false);
       }
     };
 
+    const poll = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      load(false);
+    };
+
     load(true);
-    const timer = setInterval(() => load(false), REFRESH_INTERVAL_MS);
+    const timer = setInterval(poll, REFRESH_INTERVAL_MS);
 
     return () => {
       mounted = false;
@@ -156,87 +182,184 @@ const App = () => {
     };
   }, []);
 
+  const isCompact = width < 1500;
+  const isStacked = width < 1240;
+  const isPhone = width < 900;
+  const mapScale = useMemo(() => {
+    if (width >= 1850 && height >= 1000) return 0.96;
+    if (width >= 1600) return 0.9;
+    if (width >= 1360) return 0.82;
+    if (width >= 1080) return 0.72;
+    return 0.58;
+  }, [height, width]);
+
   const pcs = useMemo(() => seats.filter((seat) => seat.group === 'pc'), [seats]);
   const consoles = useMemo(() => seats.filter((seat) => seat.group === 'console'), [seats]);
-  const activeCount = useMemo(() => pcs.filter((seat) => seat.isActive).length, [pcs]);
   const freeCount = useMemo(() => pcs.filter((seat) => seat.status === 'free').length, [pcs]);
+  const busyCount = useMemo(() => pcs.filter((seat) => seat.status === 'busy').length, [pcs]);
+  const reservedCount = useMemo(() => pcs.filter((seat) => seat.status === 'reserved').length, [pcs]);
+  const offlineCount = useMemo(() => pcs.filter((seat) => seat.status === 'offline').length, [pcs]);
+  const occupancy = pcs.length ? Math.round((busyCount / pcs.length) * 100) : 0;
+
+  const pagePadding = isPhone ? 14 : isCompact ? 20 : 26;
 
   return (
     <SafeAreaView style={styles.safe}>
-      <StatusBar barStyle="light-content" backgroundColor="#080808" />
+      <StatusBar barStyle="light-content" backgroundColor="#091017" />
       <ScrollView
-        contentContainerStyle={styles.page}
-        onScroll={(event) => {
-          window.localStorage.setItem(SCROLL_STORAGE_KEY, String(event.nativeEvent.contentOffset.y));
-        }}
-        scrollEventThrottle={250}
-        contentOffset={{ x: 0, y: initialScrollY }}
+        contentContainerStyle={[
+          styles.page,
+          {
+            minHeight: height,
+            paddingHorizontal: pagePadding,
+            paddingTop: isPhone ? 12 : 18,
+            paddingBottom: isPhone ? 12 : 18,
+          },
+        ]}
+        showsVerticalScrollIndicator={false}
       >
-        <View style={styles.header}>
-          <View>
-            <Text style={styles.kicker}>Компьютерный клуб</Text>
-            <Text style={styles.logo}>CyberStreet</Text>
+        <View style={[styles.headerShell, isStacked && styles.headerShellStacked]}>
+          <View style={styles.headerPrimary}>
+            <View style={styles.brandBadge}>
+              <Text style={styles.brandBadgeText}>ADMIN DESK</Text>
+            </View>
+            <Text style={[styles.logo, isPhone && styles.logoPhone]}>CyberStreet</Text>
+            <Text style={[styles.subtitle, isPhone && styles.subtitlePhone]}>
+              Карта клуба, занятость хостов и ключевые тарифы на одном экране
+            </Text>
           </View>
-          <Text style={styles.address}>ул. Чкалова 78а</Text>
+
+          <View style={[styles.headerMeta, isPhone && styles.headerMetaPhone]}>
+            <View style={styles.liveCard}>
+              <View style={styles.liveDot} />
+              <View>
+                <Text style={styles.liveLabel}>Обновление данных</Text>
+                <Text style={styles.liveValue}>каждые 30 секунд</Text>
+              </View>
+            </View>
+            <View style={styles.clockBlock}>
+              <Text style={[styles.clockValue, isPhone && styles.clockValuePhone]}>{formatClock(now)}</Text>
+              <Text style={styles.clockDate}>{formatDate(now)}</Text>
+              <Text style={styles.clockMeta}>Последнее обновление: {formatTimestamp(lastUpdatedAt)}</Text>
+            </View>
+          </View>
         </View>
 
-        {isLoading ? (
-          <ActivityIndicator color="#e6c15a" size="large" />
-        ) : (
-          <>
-            <View style={styles.stats}>
-              <Stat value={pcs.length} label="ПК всего" />
-              <Stat value={activeCount} label="Активны" />
-              <Stat value={freeCount} label="Свободны" />
-            </View>
+        <View style={[styles.statsRow, isStacked && styles.statsRowStacked]}>
+          <MetricCard value={pcs.length} label="Всего ПК" tone="neutral" />
+          <MetricCard value={freeCount} label="Свободно" tone="success" />
+          <MetricCard value={busyCount} label="Занято" tone="info" />
+          <MetricCard value={reservedCount} label="Бронь" tone="warning" />
+          <MetricCard value={`${occupancy}%`} label="Загрузка" tone="accent" />
+        </View>
 
-            <View style={styles.mainSurface}>
-              <View style={styles.mapArea}>
-                <View style={styles.sectionHeader}>
-                  <Text style={styles.sectionTitle}>Карта клуба</Text>
-                  <View style={styles.legend}>
-                    <LegendDot color="#18a957" label="Свободен" />
-                    <LegendDot color="#1388ff" label="Активен" />
-                    <LegendDot color="#f59f25" label="Бронь" />
-                    <LegendDot color="#d34242" label="Обслуживание" />
-                  </View>
+        <View style={[styles.mainGrid, isStacked && styles.mainGridStacked]}>
+          <View style={styles.leftColumn}>
+            <View style={styles.panel}>
+              <View style={[styles.panelHeader, isPhone && styles.panelHeaderStacked]}>
+                <View>
+                  <Text style={styles.panelEyebrow}>LIVE MAP</Text>
+                  <Text style={styles.panelTitle}>Карта зала</Text>
                 </View>
-                <ClubMap seats={pcs} />
+                <View style={[styles.legend, isPhone && styles.legendWrap]}>
+                  <LegendDot color="#4ade80" label="Свободен" />
+                  <LegendDot color="#38bdf8" label="Занят" />
+                  <LegendDot color="#f59e0b" label="Бронь" />
+                  <LegendDot color="#f87171" label="Сервис" />
+                </View>
               </View>
 
-              <View style={styles.tariffArea}>
-                <Text style={styles.sectionTitle}>Тарифы</Text>
-                <View style={styles.tariffBoard}>
-                  <PriceSection color="blue" title="STANDARD" rows={standardHourly} />
-                  <PackSection color="blue" rows={standardPacks} />
-                  <PriceSection color="red" title="BOOTCAMP" rows={bootcampHourly} />
-                  <PackSection color="red" rows={bootcampPacks} />
-                  <PromoGrid />
+              {isLoading ? (
+                <View style={styles.loaderWrap}>
+                  <ActivityIndicator color="#7dd3fc" size="large" />
+                  <Text style={styles.loaderText}>Загружаем актуальную схему клуба...</Text>
                 </View>
+              ) : (
+                <ClubMap seats={pcs} mapScale={mapScale} compact={isCompact} />
+              )}
+            </View>
+          </View>
 
-                {consoles.length > 0 && (
-                  <View style={styles.consolePanel}>
-                    <Text style={styles.sectionTitle}>Консоли</Text>
-                    <View style={styles.consoleList}>
-                      {consoles.map((seat) => (
-                        <SeatCard key={seat.id} seat={seat} compact={false} />
-                      ))}
+          <View style={styles.rightColumn}>
+            <View style={styles.panel}>
+              <View style={[styles.panelHeader, styles.priceHeaderMain, isPhone && styles.panelHeaderStacked]}>
+                <View>
+                  <Text style={styles.panelEyebrow}>PRICE BOARD</Text>
+                  <Text style={styles.panelTitle}>Тарифы и пакеты</Text>
+                </View>
+                <Text style={styles.panelMeta}>Цены для быстрого ответа у стойки администратора</Text>
+              </View>
+
+              <View style={[styles.tariffPanels, isCompact && styles.tariffPanelsCompact]}>
+                <TariffPanel title="Standard" accent="cyan" rows={standardHourly} packs={standardPacks} />
+                <TariffPanel title="Bootcamp" accent="amber" rows={bootcampHourly} packs={bootcampPacks} />
+              </View>
+
+              <View style={[styles.promoGrid, isPhone && styles.promoGridPhone]}>
+                {promoBlocks.map((promo) => (
+                  <View key={promo.title} style={[styles.promoCard, accentToneStyle[promo.tone]]}>
+                    <Text style={styles.promoTitle}>{promo.title}</Text>
+                    <Text style={styles.promoText}>{promo.text}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+
+            <View style={styles.bottomRow}>
+              <View style={[styles.panel, styles.summaryPanel]}>
+                <Text style={styles.panelEyebrow}>SUMMARY</Text>
+                <Text style={styles.panelTitle}>Сводка смены</Text>
+                <View style={styles.summaryGrid}>
+                  <SummaryLine label="Свободные ПК" value={`${freeCount}`} />
+                  <SummaryLine label="Активные сессии" value={`${busyCount}`} />
+                  <SummaryLine label="Бронирования" value={`${reservedCount}`} />
+                  <SummaryLine label="Тех. недоступно" value={`${offlineCount}`} />
+                  <SummaryLine label="Консоли" value={`${consoles.length}`} />
+                </View>
+              </View>
+
+              {consoles.length > 0 && (
+                <View style={[styles.panel, styles.consolePanel]}>
+                  <View style={styles.panelHeader}>
+                    <View>
+                      <Text style={styles.panelEyebrow}>CONSOLES</Text>
+                      <Text style={styles.panelTitle}>Консольная зона</Text>
                     </View>
                   </View>
-                )}
-              </View>
+                  <View style={styles.consoleList}>
+                    {consoles.map((seat) => (
+                      <SeatCard key={seat.id} seat={seat} compact={false} />
+                    ))}
+                  </View>
+                </View>
+              )}
             </View>
-          </>
-        )}
+          </View>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
 };
 
-const Stat = ({ value, label }: { value: number; label: string }) => (
-  <View style={styles.stat}>
-    <Text style={styles.statValue}>{value}</Text>
-    <Text style={styles.statLabel}>{label}</Text>
+const MetricCard = ({
+  label,
+  tone,
+  value,
+}: {
+  label: string;
+  tone: 'neutral' | 'success' | 'info' | 'warning' | 'accent';
+  value: number | string;
+}) => (
+  <View style={[styles.metricCard, styles[`metric_${tone}`]]}>
+    <Text style={styles.metricLabel}>{label}</Text>
+    <Text style={styles.metricValue}>{value}</Text>
+  </View>
+);
+
+const SummaryLine = ({ label, value }: { label: string; value: string }) => (
+  <View style={styles.summaryLine}>
+    <Text style={styles.summaryLabel}>{label}</Text>
+    <Text style={styles.summaryValue}>{value}</Text>
   </View>
 );
 
@@ -247,114 +370,102 @@ const LegendDot = ({ color, label }: { color: string; label: string }) => (
   </View>
 );
 
-const PriceSection = ({
+const TariffPanel = ({
   title,
-  color,
+  accent,
   rows,
+  packs,
 }: {
   title: string;
-  color: 'blue' | 'red';
+  accent: 'cyan' | 'amber';
   rows: Array<{ label: string; one: string; three: string; five: string }>;
+  packs: Array<{ label: string; day: string; night: string }>;
 }) => (
-  <View style={styles.priceSection}>
-    <View style={styles.priceHeader}>
-      <Text style={[styles.priceSectionTitle, color === 'red' ? styles.redText : styles.blueText]}>{title}</Text>
-      <View style={[styles.priceTabs, color === 'red' ? styles.redBg : styles.blueBg]}>
-        <Text style={styles.priceTab}>1 час</Text>
-        <Text style={styles.priceTab}>3 часа</Text>
-        <Text style={styles.priceTab}>5 часов</Text>
-      </View>
+  <View style={[styles.tariffPanel, accent === 'cyan' ? styles.tariffCyan : styles.tariffAmber]}>
+    <View style={styles.tariffPanelHeader}>
+      <Text style={styles.tariffTitle}>{title}</Text>
+      <View style={[styles.tariffAccent, accent === 'cyan' ? styles.accentCyan : styles.accentAmber]} />
+    </View>
+
+    <Text style={styles.tariffBlockTitle}>Почасовые</Text>
+    <View style={styles.rateHeader}>
+      <Text style={styles.rateHeaderLabel}>Период</Text>
+      <Text style={styles.rateHeaderCell}>1ч</Text>
+      <Text style={styles.rateHeaderCell}>3ч</Text>
+      <Text style={styles.rateHeaderCell}>5ч</Text>
     </View>
     {rows.map((row) => (
-      <View key={row.label} style={styles.priceRow}>
-        <Text style={styles.priceLabel}>{row.label}</Text>
-        <Text style={styles.priceCell}>{row.one}</Text>
-        <Text style={styles.priceCell}>{row.three}</Text>
-        <Text style={styles.priceCell}>{row.five}</Text>
+      <View key={row.label} style={styles.rateRow}>
+        <Text style={styles.rateLabel}>{row.label}</Text>
+        <Text style={styles.rateValue}>{row.one}</Text>
+        <Text style={styles.rateValue}>{row.three}</Text>
+        <Text style={styles.rateValue}>{row.five}</Text>
       </View>
     ))}
-  </View>
-);
 
-const PackSection = ({
-  color,
-  rows,
-}: {
-  color: 'blue' | 'red';
-  rows: Array<{ label: string; day: string; night: string }>;
-}) => (
-  <View style={styles.packSection}>
-    <View style={styles.packTitleRow}>
-      <Text style={[styles.packTitle, color === 'red' ? styles.redText : styles.blueText]}>Пакеты</Text>
-      <View style={[styles.packTab, color === 'red' ? styles.redBg : styles.blueBg]}>
-        <Text style={styles.packTabTitle}>Дневной пакет</Text>
-        <Text style={styles.packTabTime}>10:00 - 19:00</Text>
-      </View>
-      <View style={[styles.packTab, color === 'red' ? styles.redBg : styles.blueBg]}>
-        <Text style={styles.packTabTitle}>Ночной пакет</Text>
-        <Text style={styles.packTabTime}>21:30 - 08:00</Text>
-      </View>
+    <Text style={[styles.tariffBlockTitle, styles.tariffBlockGap]}>Пакеты</Text>
+    <View style={styles.rateHeader}>
+      <Text style={styles.rateHeaderLabel}>Период</Text>
+      <Text style={styles.rateHeaderCell}>День</Text>
+      <Text style={styles.rateHeaderCell}>Ночь</Text>
     </View>
-    {rows.map((row) => (
+    {packs.map((row) => (
       <View key={row.label} style={styles.packRow}>
-        <Text style={styles.priceLabel}>{row.label}</Text>
-        <Text style={styles.packPrice}>{row.day}</Text>
-        <Text style={styles.packPrice}>{row.night}</Text>
+        <Text style={styles.rateLabel}>{row.label}</Text>
+        <Text style={styles.packValue}>{row.day}</Text>
+        <Text style={styles.packValue}>{row.night}</Text>
       </View>
     ))}
   </View>
 );
 
-const PromoGrid = () => (
-  <View style={styles.promoGrid}>
-    {promoBlocks.map((promo) => (
-      <View key={promo.title} style={styles.promoItem}>
-        <Text style={[styles.promoTitle, promo.accent === 'red' ? styles.redText : styles.blueText]}>{promo.title}</Text>
-        <Text style={styles.promoText}>{promo.text}</Text>
-      </View>
-    ))}
-  </View>
-);
-
-const ClubMap = ({ seats }: { seats: PcSeat[] }) => {
+const ClubMap = ({
+  seats,
+  mapScale,
+  compact,
+}: {
+  seats: PcSeat[];
+  mapScale: number;
+  compact: boolean;
+}) => {
   const placedSeats = seats.filter((seat) => mapPositions[extractSeatNumber(seat)]);
   const unplacedSeats = seats.filter((seat) => !mapPositions[extractSeatNumber(seat)]);
 
   return (
-    <View style={styles.mapShell}>
-      <View style={styles.mapViewport}>
-        <View style={styles.mapCanvas}>
-          {walls.map((wall, index) => (
-            <View key={index} style={[styles.wall, wall]} />
-          ))}
+    <View>
+      <View style={styles.mapShell}>
+        <View style={[styles.mapViewport, { width: 824 * mapScale, height: 808 * mapScale }]}>
+          <View style={[styles.mapCanvas, { transform: [{ scale: mapScale }] }]}>
+            {walls.map((wall, index) => (
+              <View key={index} style={[styles.wall, wall]} />
+            ))}
 
-          <Text style={[styles.mapLabel, { left: 146, top: 70 }]}>Общий зал</Text>
-          <Text style={[styles.mapLabel, { left: 677, top: 452 }]}>VIP-зал</Text>
-          <Text style={[styles.mapIcon, { left: 91, top: 242 }]}>♛</Text>
-          <Text style={[styles.mapIcon, { left: 93, top: 621 }]}>✔</Text>
-          <Text style={[styles.mapIcon, { left: 91, top: 698 }]}>☕</Text>
-          <Text style={[styles.mapArrow, { left: 96, top: 15 }]}>↓</Text>
-          <Text style={[styles.mapArrow, { left: 548, top: 471 }]}>→</Text>
-          <Text style={[styles.mapArrow, { left: 170, top: 623 }]}>←</Text>
-          <Text style={[styles.mapArrow, { left: 550, top: 623 }]}>→</Text>
+            <Text style={[styles.mapLabel, { left: 146, top: 70 }]}>Общий зал</Text>
+            <Text style={[styles.mapLabel, { left: 677, top: 452 }]}>VIP-зал</Text>
+            <Text style={[styles.mapMark, { left: 92, top: 242 }]}>ADMIN</Text>
+            <Text style={[styles.mapMark, { left: 87, top: 618 }]}>WC</Text>
+            <Text style={[styles.mapMark, { left: 86, top: 694 }]}>BAR</Text>
 
-          {placedSeats.map((seat) => {
-            const number = extractSeatNumber(seat);
-            return (
-              <View key={seat.id} style={[styles.mapSeatPosition, mapPositions[number]]}>
-                <SeatCard seat={seat} compact />
-              </View>
-            );
-          })}
+            {placedSeats.map((seat) => {
+              const number = extractSeatNumber(seat);
+              return (
+                <View key={seat.id} style={[styles.mapSeatPosition, mapPositions[number]]}>
+                  <SeatCard seat={seat} compact />
+                </View>
+              );
+            })}
+          </View>
         </View>
       </View>
 
       {unplacedSeats.length > 0 && (
-        <View style={styles.unplacedRow}>
-          <Text style={styles.unplacedTitle}>Не размещены: {unplacedSeats.length}</Text>
-          {unplacedSeats.map((seat) => (
-            <SeatCard key={seat.id} seat={seat} compact={false} />
-          ))}
+        <View style={styles.unplacedShell}>
+          <Text style={styles.unplacedTitle}>Хосты вне схемы: {unplacedSeats.length}</Text>
+          <View style={[styles.unplacedRow, compact && styles.unplacedRowCompact]}>
+            {unplacedSeats.map((seat) => (
+              <SeatCard key={seat.id} seat={seat} compact={false} />
+            ))}
+          </View>
         </View>
       )}
     </View>
@@ -365,21 +476,25 @@ const SeatCard = ({ seat, compact }: { seat: PcSeat; compact: boolean }) => {
   const number = extractSeatNumber(seat);
   const remaining = formatRemaining(seat.remainingMinutes);
   const bookingTime = formatBookingTime(seat.bookingStartsAt);
-  const sessionLabel = seat.isInfiniteSession ? '∞' : remaining;
+  const sessionLabel = seat.isInfiniteSession ? 'Безлимит' : remaining;
 
   return (
     <View style={[compact ? styles.mapSeat : styles.consoleSeat, styles[`seat_${seat.status}`]]}>
       <View style={styles.seatTopRow}>
-        <Text style={[styles.seatNumber, seat.status === 'busy' && styles.seatNumberActive]}>{number || seat.name}</Text>
-        {seat.status !== 'busy' && <Text style={styles.powerIcon}>⏻</Text>}
+        <Text style={[styles.seatNumber, seat.status === 'busy' && styles.seatNumberBusy]}>
+          {number || seat.name}
+        </Text>
+        <View style={[styles.seatBadge, styles[`badge_${seat.status}`]]}>
+          <Text style={styles.seatBadgeText}>{statusText[seat.status]}</Text>
+        </View>
       </View>
-      {seat.status === 'reserved' && <Text style={styles.reservedIcon}>▤</Text>}
+
       {sessionLabel ? (
-        <Text style={[styles.seatTime, seat.isInfiniteSession && styles.infinityTime]}>
-          {seat.isInfiniteSession ? '∞' : `◷ ${sessionLabel}`}
+        <Text style={[styles.seatTime, seat.isInfiniteSession && styles.seatInfinite]}>
+          {seat.isInfiniteSession ? sessionLabel : `Осталось ${sessionLabel}`}
         </Text>
       ) : bookingTime ? (
-        <Text style={styles.seatBooking}>бронь {bookingTime}</Text>
+        <Text style={styles.seatBooking}>Бронь {bookingTime}</Text>
       ) : (
         <Text style={styles.seatStatus}>{statusText[seat.status]}</Text>
       )}
@@ -392,416 +507,628 @@ export default App;
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: '#070a0d',
+    backgroundColor: '#081018',
   },
   page: {
     width: '100%',
-    maxWidth: 1460,
+    maxWidth: 1920,
     marginHorizontal: 'auto',
-    paddingHorizontal: 24,
-    paddingTop: 16,
-    paddingBottom: 16,
-    backgroundColor: '#070a0d',
+    gap: 18,
   },
-  header: {
+  headerShell: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
     justifyContent: 'space-between',
-    marginBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#171f27',
-    paddingBottom: 12,
+    alignItems: 'stretch',
+    gap: 18,
+    padding: 22,
+    borderRadius: 28,
+    borderWidth: 1,
+    borderColor: 'rgba(125, 211, 252, 0.12)',
+    backgroundColor: 'rgba(7, 16, 24, 0.88)',
   },
-  kicker: {
-    color: '#e6c15a',
-    fontSize: 12,
+  headerShellStacked: {
+    flexDirection: 'column',
+  },
+  headerPrimary: {
+    flex: 1,
+    justifyContent: 'space-between',
+    minHeight: 138,
+  },
+  brandBadge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: '#123044',
+    borderWidth: 1,
+    borderColor: '#20506f',
+  },
+  brandBadgeText: {
+    color: '#7dd3fc',
+    fontSize: 11,
+    letterSpacing: 1.6,
     fontWeight: '800',
-    textTransform: 'uppercase',
   },
   logo: {
-    color: '#fff',
-    fontSize: 38,
+    marginTop: 14,
+    color: '#f8fafc',
+    fontSize: 54,
+    lineHeight: 58,
     fontWeight: '900',
-    marginTop: 2,
+    letterSpacing: -1.4,
   },
-  address: {
-    color: '#e6c15a',
+  logoPhone: {
+    fontSize: 40,
+    lineHeight: 44,
+  },
+  subtitle: {
+    marginTop: 10,
+    maxWidth: 720,
+    color: '#9eb4c5',
+    fontSize: 18,
+    lineHeight: 26,
+    fontWeight: '500',
+  },
+  subtitlePhone: {
     fontSize: 15,
-    fontWeight: '800',
-    marginBottom: 4,
+    lineHeight: 22,
   },
-  stats: {
+  headerMeta: {
+    width: 420,
+    gap: 14,
+    alignItems: 'stretch',
+  },
+  headerMetaPhone: {
+    width: '100%',
+  },
+  liveCard: {
     flexDirection: 'row',
-    gap: 10,
-    marginBottom: 14,
-  },
-  stat: {
-    minWidth: 132,
-    borderRadius: 8,
+    alignItems: 'center',
+    gap: 12,
+    padding: 16,
+    borderRadius: 22,
+    backgroundColor: 'rgba(15, 30, 45, 0.92)',
     borderWidth: 1,
-    borderColor: '#202a33',
-    backgroundColor: '#0f151b',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    borderColor: 'rgba(56, 189, 248, 0.18)',
   },
-  statValue: {
-    color: '#fff',
-    fontSize: 24,
+  liveDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 999,
+    backgroundColor: '#4ade80',
+  },
+  liveLabel: {
+    color: '#8fb2c7',
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+  },
+  liveValue: {
+    color: '#f8fafc',
+    fontSize: 18,
+    fontWeight: '800',
+    marginTop: 4,
+  },
+  clockBlock: {
+    flex: 1,
+    padding: 18,
+    borderRadius: 22,
+    backgroundColor: '#111f2c',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.07)',
+    justifyContent: 'center',
+  },
+  clockValue: {
+    color: '#f8fafc',
+    fontSize: 48,
+    lineHeight: 50,
+    fontWeight: '900',
+    letterSpacing: -1,
+  },
+  clockValuePhone: {
+    fontSize: 40,
+    lineHeight: 42,
+  },
+  clockDate: {
+    marginTop: 8,
+    color: '#8fb2c7',
+    fontSize: 16,
+    fontWeight: '600',
+    textTransform: 'capitalize',
+  },
+  clockMeta: {
+    marginTop: 12,
+    color: '#c4d5e2',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  statsRow: {
+    flexDirection: 'row',
+    gap: 14,
+  },
+  statsRowStacked: {
+    flexWrap: 'wrap',
+  },
+  metricCard: {
+    flex: 1,
+    minWidth: 150,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+    borderRadius: 22,
+    borderWidth: 1,
+  },
+  metric_neutral: {
+    backgroundColor: '#101a24',
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+  metric_success: {
+    backgroundColor: 'rgba(10, 43, 31, 0.92)',
+    borderColor: 'rgba(74, 222, 128, 0.24)',
+  },
+  metric_info: {
+    backgroundColor: 'rgba(9, 34, 53, 0.92)',
+    borderColor: 'rgba(56, 189, 248, 0.24)',
+  },
+  metric_warning: {
+    backgroundColor: 'rgba(52, 34, 10, 0.92)',
+    borderColor: 'rgba(245, 158, 11, 0.24)',
+  },
+  metric_accent: {
+    backgroundColor: 'rgba(26, 23, 46, 0.92)',
+    borderColor: 'rgba(129, 140, 248, 0.24)',
+  },
+  metricLabel: {
+    color: '#8fb2c7',
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 1.1,
+    textTransform: 'uppercase',
+  },
+  metricValue: {
+    marginTop: 10,
+    color: '#f8fafc',
+    fontSize: 34,
+    lineHeight: 36,
     fontWeight: '900',
   },
-  statLabel: {
-    color: '#99a8b8',
-    fontSize: 12,
-    marginTop: 2,
-  },
-  mainSurface: {
+  mainGrid: {
     flexDirection: 'row',
+    gap: 18,
     alignItems: 'flex-start',
-    gap: 22,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#1a232b',
-    backgroundColor: '#0b1015',
-    padding: 18,
   },
-  mapArea: {
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#19222a',
-    backgroundColor: '#080d12',
-    padding: 14,
+  mainGridStacked: {
+    flexDirection: 'column',
   },
-  tariffArea: {
+  leftColumn: {
+    flex: 1.2,
+  },
+  rightColumn: {
     flex: 1,
-    minWidth: 560,
+    gap: 18,
   },
-  consolePanel: {
-    marginTop: 18,
-    borderRadius: 8,
+  panel: {
+    padding: 18,
+    borderRadius: 28,
     borderWidth: 1,
-    borderColor: '#1d2730',
-    backgroundColor: '#0f151b',
-    padding: 12,
+    borderColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: 'rgba(10, 16, 24, 0.92)',
   },
-  consoleList: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-  },
-  sectionHeader: {
+  panelHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 12,
+    gap: 12,
+    marginBottom: 16,
   },
-  sectionTitle: {
-    color: '#fff',
-    fontSize: 22,
+  panelHeaderStacked: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+  },
+  panelEyebrow: {
+    color: '#7dd3fc',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1.8,
+    textTransform: 'uppercase',
+  },
+  panelTitle: {
+    marginTop: 6,
+    color: '#f8fafc',
+    fontSize: 30,
+    lineHeight: 32,
     fontWeight: '900',
-    marginBottom: 14,
+    letterSpacing: -0.8,
+  },
+  panelMeta: {
+    color: '#9eb4c5',
+    fontSize: 13,
+    lineHeight: 18,
+    textAlign: 'right',
+    maxWidth: 240,
+  },
+  loaderWrap: {
+    height: 540,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 16,
+  },
+  loaderText: {
+    color: '#8fb2c7',
+    fontSize: 16,
+    fontWeight: '600',
   },
   legend: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
   },
+  legendWrap: {
+    flexWrap: 'wrap',
+  },
   legendItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 8,
   },
   legendDot: {
     width: 10,
     height: 10,
-    borderRadius: 5,
+    borderRadius: 999,
   },
   legendText: {
-    color: '#8f9da9',
-    fontSize: 12,
+    color: '#c4d5e2',
+    fontSize: 13,
     fontWeight: '700',
   },
-  tariffBoard: {
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#1c2630',
-    backgroundColor: '#090d12',
-    padding: 12,
-  },
-  priceSection: {
-    borderBottomWidth: 1,
-    borderBottomColor: '#202832',
-    paddingBottom: 8,
-    marginBottom: 8,
-  },
-  priceHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    marginBottom: 6,
-  },
-  priceSectionTitle: {
-    width: 118,
-    fontSize: 22,
-    fontWeight: '900',
-    textTransform: 'uppercase',
-  },
-  priceTabs: {
-    flex: 1,
-    borderRadius: 6,
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    paddingVertical: 7,
-  },
-  priceTab: {
-    color: '#fff',
-    fontSize: 15,
-    fontWeight: '900',
-    textTransform: 'uppercase',
-  },
-  priceRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 3,
-  },
-  priceLabel: {
-    width: 128,
-    color: '#f4f4f4',
-    fontSize: 16,
-    lineHeight: 18,
-  },
-  priceCell: {
-    flex: 1,
-    color: '#fff',
-    fontSize: 18,
-    textAlign: 'center',
-  },
-  packSection: {
-    borderBottomWidth: 1,
-    borderBottomColor: '#202832',
-    paddingBottom: 8,
-    marginBottom: 8,
-  },
-  packTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 6,
-  },
-  packTitle: {
-    width: 118,
-    fontSize: 21,
-    fontWeight: '900',
-    textTransform: 'uppercase',
-  },
-  packTab: {
-    flex: 1,
-    borderRadius: 6,
-    paddingVertical: 6,
-    alignItems: 'center',
-  },
-  packTabTitle: {
-    color: '#fff',
-    fontSize: 13,
-    fontWeight: '900',
-    textTransform: 'uppercase',
-  },
-  packTabTime: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '800',
-    marginTop: 1,
-  },
-  packRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 3,
-  },
-  packPrice: {
-    flex: 1,
-    color: '#fff',
-    fontSize: 18,
-    textAlign: 'center',
-  },
-  promoGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  promoItem: {
-    width: 170,
-    minHeight: 72,
-    borderRadius: 8,
-    backgroundColor: '#10161c',
-    borderWidth: 1,
-    borderColor: '#202832',
-    padding: 9,
-  },
-  promoTitle: {
-    fontSize: 15,
-    fontWeight: '900',
-    textTransform: 'uppercase',
-  },
-  promoText: {
-    color: '#fff',
-    fontSize: 11,
-    lineHeight: 14,
-    fontWeight: '800',
-    marginTop: 4,
-    textTransform: 'uppercase',
-  },
-  blueText: {
-    color: '#147cff',
-  },
-  redText: {
-    color: '#d83a3a',
-  },
-  blueBg: {
-    backgroundColor: '#155ed8',
-  },
-  redBg: {
-    backgroundColor: '#a5262b',
-  },
   mapShell: {
-    borderRadius: 8,
-    borderWidth: 0,
-    backgroundColor: '#090e13',
-    padding: 0,
+    padding: 16,
+    borderRadius: 24,
+    backgroundColor: '#09131c',
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.08)',
   },
   mapViewport: {
-    width: 824 * MAP_SCALE,
-    height: 808 * MAP_SCALE,
     overflow: 'hidden',
+    borderRadius: 18,
+    alignSelf: 'center',
   },
   mapCanvas: {
     width: 824,
     height: 808,
     position: 'relative',
-    backgroundColor: '#090e13',
-    transform: [{ scale: MAP_SCALE }],
+    backgroundColor: '#081018',
     transformOrigin: 'top left',
   },
   wall: {
     position: 'absolute',
-    backgroundColor: '#252c33',
+    backgroundColor: '#22313f',
   },
   mapLabel: {
     position: 'absolute',
-    color: '#99a8b8',
-    fontSize: 12,
+    color: '#8fb2c7',
+    fontSize: 13,
     fontWeight: '700',
   },
-  mapIcon: {
+  mapMark: {
     position: 'absolute',
-    color: '#8d949c',
-    fontSize: 24,
-  },
-  mapArrow: {
-    position: 'absolute',
-    color: '#8d949c',
-    fontSize: 24,
+    color: '#4fd1c5',
+    fontSize: 16,
+    fontWeight: '800',
+    letterSpacing: 0.6,
   },
   mapSeatPosition: {
     position: 'absolute',
   },
   mapSeat: {
-    width: 74,
-    height: 74,
-    borderRadius: 7,
+    width: 76,
+    minHeight: 76,
+    borderRadius: 18,
     borderWidth: 1,
-    padding: 9,
+    paddingHorizontal: 8,
+    paddingVertical: 9,
     justifyContent: 'space-between',
   },
   consoleSeat: {
-    width: 172,
-    minHeight: 86,
-    borderRadius: 8,
+    flex: 1,
+    minWidth: 182,
+    minHeight: 92,
+    borderRadius: 20,
     borderWidth: 1,
-    padding: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
     justifyContent: 'space-between',
   },
   seat_free: {
-    backgroundColor: '#0f2a1b',
-    borderColor: '#18a957',
+    backgroundColor: 'rgba(9, 45, 28, 0.96)',
+    borderColor: 'rgba(74, 222, 128, 0.28)',
   },
   seat_busy: {
-    backgroundColor: '#0d2238',
-    borderColor: '#1388ff',
+    backgroundColor: 'rgba(7, 34, 51, 0.96)',
+    borderColor: 'rgba(56, 189, 248, 0.28)',
   },
   seat_reserved: {
-    backgroundColor: '#2b2110',
-    borderColor: '#f59f25',
+    backgroundColor: 'rgba(57, 35, 8, 0.96)',
+    borderColor: 'rgba(245, 158, 11, 0.28)',
   },
   seat_offline: {
-    backgroundColor: '#2b1414',
-    borderColor: '#d34242',
+    backgroundColor: 'rgba(57, 17, 20, 0.96)',
+    borderColor: 'rgba(248, 113, 113, 0.28)',
   },
   seatTopRow: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 8,
   },
   seatNumber: {
-    color: '#f4f7f8',
-    fontSize: 16,
+    color: '#f8fafc',
+    fontSize: 18,
+    lineHeight: 20,
     fontWeight: '900',
   },
-  seatNumberActive: {
-    color: '#1d94ff',
+  seatNumberBusy: {
+    color: '#bfe8ff',
   },
-  powerIcon: {
-    width: 25,
-    height: 25,
-    borderRadius: 13,
-    backgroundColor: 'rgba(255,255,255,0.13)',
-    color: '#d6dde4',
-    fontSize: 14,
-    lineHeight: 25,
-    textAlign: 'center',
+  seatBadge: {
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    borderRadius: 999,
   },
-  reservedIcon: {
-    position: 'absolute',
-    top: 14,
-    right: 13,
-    width: 25,
-    height: 25,
-    borderRadius: 13,
-    backgroundColor: '#7a430b',
-    color: '#ffd08a',
-    fontSize: 13,
-    lineHeight: 25,
-    textAlign: 'center',
+  badge_free: {
+    backgroundColor: 'rgba(74, 222, 128, 0.16)',
   },
-  seatStatus: {
-    color: '#d6dde4',
-    fontSize: 11,
-    fontWeight: '700',
+  badge_busy: {
+    backgroundColor: 'rgba(56, 189, 248, 0.16)',
+  },
+  badge_reserved: {
+    backgroundColor: 'rgba(245, 158, 11, 0.16)',
+  },
+  badge_offline: {
+    backgroundColor: 'rgba(248, 113, 113, 0.16)',
+  },
+  seatBadgeText: {
+    color: '#e2edf5',
+    fontSize: 9,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   seatTime: {
-    color: '#1d94ff',
-    fontSize: 11,
-    fontWeight: '800',
+    marginTop: 10,
+    color: '#d8edf8',
+    fontSize: 12,
+    lineHeight: 15,
+    fontWeight: '700',
   },
-  infinityTime: {
-    fontSize: 26,
-    lineHeight: 28,
-    textAlign: 'center',
+  seatInfinite: {
+    color: '#86efac',
+  },
+  seatStatus: {
+    marginTop: 10,
+    color: '#d8edf8',
+    fontSize: 12,
+    fontWeight: '700',
   },
   seatBooking: {
-    color: '#f59f25',
-    fontSize: 9,
-    lineHeight: 11,
-    fontWeight: '900',
+    marginTop: 10,
+    color: '#fde68a',
+    fontSize: 12,
+    lineHeight: 15,
+    fontWeight: '800',
+  },
+  unplacedShell: {
+    marginTop: 16,
+  },
+  unplacedTitle: {
+    color: '#8fb2c7',
+    fontSize: 13,
+    fontWeight: '700',
+    marginBottom: 10,
   },
   unplacedRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 10,
+    gap: 10,
   },
-  unplacedTitle: {
-    width: '100%',
-    color: '#99a8b8',
-    fontSize: 12,
+  unplacedRowCompact: {
+    flexDirection: 'column',
+  },
+  priceHeaderMain: {
+    marginBottom: 18,
+  },
+  tariffPanels: {
+    flexDirection: 'row',
+    gap: 14,
+  },
+  tariffPanelsCompact: {
+    flexDirection: 'column',
+  },
+  tariffPanel: {
+    flex: 1,
+    borderRadius: 24,
+    borderWidth: 1,
+    padding: 16,
+  },
+  tariffCyan: {
+    backgroundColor: 'rgba(8, 24, 36, 0.96)',
+    borderColor: 'rgba(56, 189, 248, 0.18)',
+  },
+  tariffAmber: {
+    backgroundColor: 'rgba(34, 23, 8, 0.96)',
+    borderColor: 'rgba(245, 158, 11, 0.18)',
+  },
+  tariffPanelHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 14,
+  },
+  tariffTitle: {
+    color: '#f8fafc',
+    fontSize: 26,
+    lineHeight: 28,
+    fontWeight: '900',
+    letterSpacing: -0.6,
+    textTransform: 'uppercase',
+  },
+  tariffAccent: {
+    width: 44,
+    height: 8,
+    borderRadius: 999,
+  },
+  accentCyan: {
+    backgroundColor: '#38bdf8',
+  },
+  accentAmber: {
+    backgroundColor: '#f59e0b',
+  },
+  tariffBlockTitle: {
+    color: '#dce8f1',
+    fontSize: 13,
     fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: 8,
+  },
+  tariffBlockGap: {
+    marginTop: 16,
+  },
+  rateHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+    gap: 8,
+  },
+  rateHeaderLabel: {
+    flex: 1.3,
+    color: '#88a4b7',
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  rateHeaderCell: {
+    flex: 1,
+    color: '#88a4b7',
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    textAlign: 'center',
+    letterSpacing: 1,
+  },
+  rateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 8,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.06)',
+  },
+  packRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 8,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.06)',
+  },
+  rateLabel: {
+    flex: 1.3,
+    color: '#f8fafc',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  rateValue: {
+    flex: 1,
+    color: '#f8fafc',
+    fontSize: 18,
+    fontWeight: '900',
+    textAlign: 'center',
+  },
+  packValue: {
+    flex: 1,
+    color: '#f8fafc',
+    fontSize: 18,
+    fontWeight: '900',
+    textAlign: 'center',
+  },
+  promoGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginTop: 14,
+  },
+  promoGridPhone: {
+    flexDirection: 'column',
+  },
+  promoCard: {
+    flex: 1,
+    minWidth: 170,
+    minHeight: 90,
+    borderRadius: 18,
+    padding: 14,
+    borderWidth: 1,
+  },
+  promoCool: {
+    backgroundColor: 'rgba(11, 28, 45, 0.96)',
+    borderColor: 'rgba(56, 189, 248, 0.16)',
+  },
+  promoWarm: {
+    backgroundColor: 'rgba(48, 23, 10, 0.96)',
+    borderColor: 'rgba(245, 158, 11, 0.16)',
+  },
+  promoTitle: {
+    color: '#f8fafc',
+    fontSize: 16,
+    fontWeight: '900',
+  },
+  promoText: {
+    marginTop: 8,
+    color: '#cfe0eb',
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '600',
+  },
+  bottomRow: {
+    flexDirection: 'row',
+    gap: 18,
+    alignItems: 'stretch',
+    flexWrap: 'wrap',
+  },
+  summaryPanel: {
+    flex: 0.86,
+    minWidth: 280,
+  },
+  consolePanel: {
+    flex: 1.14,
+    minWidth: 320,
+  },
+  summaryGrid: {
+    marginTop: 10,
+    gap: 12,
+  },
+  summaryLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.06)',
+  },
+  summaryLabel: {
+    color: '#9eb4c5',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  summaryValue: {
+    color: '#f8fafc',
+    fontSize: 20,
+    fontWeight: '900',
+  },
+  consoleList: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
   },
 });
