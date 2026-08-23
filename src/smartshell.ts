@@ -22,6 +22,12 @@ export type Tariff = {
   description: string;
 };
 
+export type ShiftOperator = {
+  id: string | null;
+  displayName: string;
+  phone: string;
+};
+
 type SmartShellHost = {
   id: number;
   group_id?: number;
@@ -57,6 +63,19 @@ type SmartShellTariff = {
   price_list?: Array<{
     cost_map?: Array<{ title?: string | null; value?: number | null }> | null;
   }> | null;
+};
+
+type SmartShellShiftWorker = {
+  id?: number | string | null;
+  first_name?: string | null;
+  last_name?: string | null;
+  middle_name?: string | null;
+  nickname?: string | null;
+  phone?: string | null;
+};
+
+type SmartShellActiveShift = {
+  worker?: SmartShellShiftWorker | null;
 };
 
 const fallbackSeats: PcSeat[] = [
@@ -164,6 +183,12 @@ const fallbackTariffs: Tariff[] = [
   },
 ];
 
+const fallbackShiftOperator: ShiftOperator = {
+  id: null,
+  displayName: 'Сотрудник не определен',
+  phone: '',
+};
+
 const requestLocalApi = async <T>(path: string): Promise<T> => {
   const response = await fetch(path, { headers: { Accept: 'application/json' } });
 
@@ -172,6 +197,17 @@ const requestLocalApi = async <T>(path: string): Promise<T> => {
   }
 
   return (await response.json()) as T;
+};
+
+const normalizeShiftOperator = (shift: SmartShellActiveShift | null): ShiftOperator => {
+  const worker = shift?.worker;
+  const displayName = [worker?.first_name, worker?.last_name, worker?.middle_name].filter(Boolean).join(' ').trim();
+
+  return {
+    id: worker?.id != null ? String(worker.id) : null,
+    displayName: displayName || worker?.nickname || 'Сотрудник не определен',
+    phone: worker?.phone ?? '',
+  };
 };
 
 const activeSession = (sessions?: SmartShellClientSession[] | null) => sessions?.[0] ?? null;
@@ -271,5 +307,14 @@ export const getTariffs = async (): Promise<Tariff[]> => {
       .map(normalizeTariff);
   } catch {
     return fallbackTariffs;
+  }
+};
+
+export const getShiftOperator = async (): Promise<ShiftOperator> => {
+  try {
+    const shift = await requestLocalApi<SmartShellActiveShift | null>('/api/smartshell/shift');
+    return normalizeShiftOperator(shift);
+  } catch {
+    return fallbackShiftOperator;
   }
 };

@@ -6,12 +6,15 @@ import {
   StatusBar,
   StyleSheet,
   Text,
+  TextInput,
   View,
   useWindowDimensions,
 } from 'react-native';
-import { getDetailedWorkers, PcSeat } from './src/smartshell';
+import { getDetailedWorkers, getShiftOperator, PcSeat, ShiftOperator } from './src/smartshell';
 
 const REFRESH_INTERVAL_MS = 30000;
+const TRANSFER_PHONE_STORAGE_KEY = 'cyberstreet-transfer-phone';
+const TRANSFER_BANK_STORAGE_KEY = 'cyberstreet-transfer-bank';
 
 const statusText: Record<PcSeat['status'], string> = {
   free: 'Свободен',
@@ -134,12 +137,29 @@ const formatTimestamp = (value: Date | null) =>
       }).format(value)
     : 'нет данных';
 
+const storageGet = (key: string) => {
+  if (typeof window === 'undefined') return '';
+  return window.localStorage.getItem(key) ?? '';
+};
+
+const storageSet = (key: string, value: string) => {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(key, value);
+};
+
 const App = () => {
   const { width, height } = useWindowDimensions();
   const [seats, setSeats] = useState<PcSeat[]>([]);
   const [isLoading, setLoading] = useState(true);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
   const [now, setNow] = useState(() => new Date());
+  const [shiftOperator, setShiftOperator] = useState<ShiftOperator>({
+    id: null,
+    displayName: 'Сотрудник не определен',
+    phone: '',
+  });
+  const [transferPhone, setTransferPhone] = useState(() => storageGet(TRANSFER_PHONE_STORAGE_KEY));
+  const [transferBank, setTransferBank] = useState(() => storageGet(TRANSFER_BANK_STORAGE_KEY));
 
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 1000);
@@ -153,9 +173,10 @@ const App = () => {
       if (showLoader && mounted) setLoading(true);
 
       try {
-        const nextSeats = await getDetailedWorkers();
+        const [nextSeats, nextShiftOperator] = await Promise.all([getDetailedWorkers(), getShiftOperator()]);
         if (mounted) {
           setSeats(nextSeats);
+          setShiftOperator(nextShiftOperator);
           setLastUpdatedAt(new Date());
         }
       } finally {
@@ -193,7 +214,6 @@ const App = () => {
   const freeCount = useMemo(() => pcs.filter((seat) => seat.status === 'free').length, [pcs]);
   const busyCount = useMemo(() => pcs.filter((seat) => seat.status === 'busy').length, [pcs]);
   const reservedCount = useMemo(() => pcs.filter((seat) => seat.status === 'reserved').length, [pcs]);
-  const offlineCount = useMemo(() => pcs.filter((seat) => seat.status === 'offline').length, [pcs]);
   const occupancy = pcs.length ? Math.round((busyCount / pcs.length) * 100) : 0;
 
   const pagePadding = isPhone ? 14 : isCompact ? 20 : 26;
@@ -305,14 +325,28 @@ const App = () => {
 
             <View style={styles.bottomRow}>
               <View style={[styles.panel, styles.summaryPanel]}>
-                <Text style={styles.panelEyebrow}>SUMMARY</Text>
-                <Text style={styles.panelTitle}>Сводка смены</Text>
-                <View style={styles.summaryGrid}>
-                  <SummaryLine label="Свободные ПК" value={`${freeCount}`} />
-                  <SummaryLine label="Активные сессии" value={`${busyCount}`} />
-                  <SummaryLine label="Бронирования" value={`${reservedCount}`} />
-                  <SummaryLine label="Тех. недоступно" value={`${offlineCount}`} />
-                  <SummaryLine label="Консоли" value={`${consoles.length}`} />
+                <Text style={styles.panelEyebrow}>TRANSFER</Text>
+                <Text style={styles.panelTitle}>Перевод сотруднику</Text>
+                <View style={styles.transferForm}>
+                  <FieldBlock label="Сотрудник на смене" value={shiftOperator.displayName} readonly />
+                  <FieldBlock
+                    label="Номер телефона"
+                    value={transferPhone}
+                    onChangeText={(value) => {
+                      setTransferPhone(value);
+                      storageSet(TRANSFER_PHONE_STORAGE_KEY, value);
+                    }}
+                    placeholder="+7 (___) ___-__-__"
+                  />
+                  <FieldBlock
+                    label="Банк для перевода"
+                    value={transferBank}
+                    onChangeText={(value) => {
+                      setTransferBank(value);
+                      storageSet(TRANSFER_BANK_STORAGE_KEY, value);
+                    }}
+                    placeholder="Например, Сбер или Т-Банк"
+                  />
                 </View>
               </View>
 
@@ -354,10 +388,34 @@ const MetricCard = ({
   </View>
 );
 
-const SummaryLine = ({ label, value }: { label: string; value: string }) => (
-  <View style={styles.summaryLine}>
-    <Text style={styles.summaryLabel}>{label}</Text>
-    <Text style={styles.summaryValue}>{value}</Text>
+const FieldBlock = ({
+  label,
+  onChangeText,
+  placeholder,
+  readonly = false,
+  value,
+}: {
+  label: string;
+  onChangeText?: (value: string) => void;
+  placeholder?: string;
+  readonly?: boolean;
+  value: string;
+}) => (
+  <View style={styles.fieldBlock}>
+    <Text style={styles.fieldLabel}>{label}</Text>
+    {readonly ? (
+      <View style={[styles.fieldShell, styles.fieldReadonlyShell]}>
+        <Text style={styles.fieldReadonlyValue}>{value || 'Не заполнено'}</Text>
+      </View>
+    ) : (
+      <TextInput
+        value={value}
+        onChangeText={onChangeText}
+        placeholder={placeholder}
+        placeholderTextColor="#6f8798"
+        style={styles.fieldInput}
+      />
+    )}
   </View>
 );
 
@@ -1102,27 +1160,47 @@ const styles = StyleSheet.create({
     flex: 1.14,
     minWidth: 320,
   },
-  summaryGrid: {
+  transferForm: {
     marginTop: 10,
-    gap: 12,
+    gap: 14,
   },
-  summaryLine: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingBottom: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.06)',
+  fieldBlock: {
+    gap: 8,
   },
-  summaryLabel: {
-    color: '#9eb4c5',
-    fontSize: 15,
-    fontWeight: '600',
+  fieldLabel: {
+    color: '#8fb2c7',
+    fontSize: 12,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
   },
-  summaryValue: {
+  fieldShell: {
+    minHeight: 58,
+    borderRadius: 18,
+    borderWidth: 1,
+    paddingHorizontal: 16,
+    justifyContent: 'center',
+  },
+  fieldReadonlyShell: {
+    backgroundColor: 'rgba(16, 28, 39, 0.94)',
+    borderColor: 'rgba(125, 211, 252, 0.14)',
+  },
+  fieldReadonlyValue: {
     color: '#f8fafc',
     fontSize: 20,
-    fontWeight: '900',
+    fontWeight: '800',
+  },
+  fieldInput: {
+    minHeight: 58,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: 'rgba(8, 18, 28, 0.98)',
+    color: '#f8fafc',
+    fontSize: 18,
+    fontWeight: '700',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
   consoleList: {
     flexDirection: 'row',

@@ -175,6 +175,44 @@ const smartshellApi = (env: SmartShellEnv): Plugin => {
           writeJson(res, 500, { error: error instanceof Error ? error.message : String(error) });
         }
       });
+
+      server.middlewares.use('/api/smartshell/shift', async (_req, res) => {
+        try {
+          const accessToken = await getToken();
+          const data = await graphql<{
+            activeWorkShift: {
+              worker?: {
+                id?: number | string | null;
+                first_name?: string | null;
+                last_name?: string | null;
+                middle_name?: string | null;
+                nickname?: string | null;
+                phone?: string | null;
+              } | null;
+            } | null;
+          }>(
+            `
+              query ActiveShift {
+                activeWorkShift {
+                  worker {
+                    id
+                    first_name
+                    last_name
+                    middle_name
+                    nickname
+                    phone
+                  }
+                }
+              }
+            `,
+            accessToken,
+          );
+
+          writeJson(res, 200, data.activeWorkShift ?? null);
+        } catch (error) {
+          writeJson(res, 500, { error: error instanceof Error ? error.message : String(error) });
+        }
+      });
     },
   };
 };
