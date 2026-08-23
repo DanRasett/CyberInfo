@@ -51,26 +51,26 @@ const promoBlocks = [
 ];
 
 const mapPositions: Record<number, { left: number; top: number }> = {
-  1: { left: 218, top: 65 },
-  2: { left: 218, top: 142 },
-  3: { left: 218, top: 218 },
-  4: { left: 218, top: 294 },
-  5: { left: 218, top: 370 },
-  6: { left: 295, top: 370 },
-  7: { left: 295, top: 294 },
-  8: { left: 295, top: 218 },
-  9: { left: 295, top: 142 },
-  10: { left: 295, top: 65 },
+  1: { left: 210, top: 65 },
+  2: { left: 210, top: 158 },
+  3: { left: 210, top: 251 },
+  4: { left: 210, top: 344 },
+  5: { left: 210, top: 437 },
+  6: { left: 312, top: 437 },
+  7: { left: 312, top: 344 },
+  8: { left: 312, top: 251 },
+  9: { left: 312, top: 158 },
+  10: { left: 312, top: 65 },
   11: { left: 447, top: 65 },
-  12: { left: 447, top: 142 },
-  13: { left: 447, top: 218 },
-  14: { left: 447, top: 294 },
-  15: { left: 447, top: 370 },
+  12: { left: 447, top: 158 },
+  13: { left: 447, top: 251 },
+  14: { left: 447, top: 344 },
+  15: { left: 447, top: 437 },
   16: { left: 674, top: 65 },
-  17: { left: 674, top: 142 },
-  18: { left: 674, top: 218 },
-  19: { left: 674, top: 294 },
-  20: { left: 674, top: 370 },
+  17: { left: 674, top: 158 },
+  18: { left: 674, top: 251 },
+  19: { left: 674, top: 344 },
+  20: { left: 674, top: 437 },
 };
 
 const walls = [
@@ -519,10 +519,10 @@ const ClubMap = ({
             ))}
 
             <Text style={[styles.mapLabel, { left: 146, top: 70 }]}>Общий зал</Text>
-            <Text style={[styles.mapLabel, { left: 677, top: 452 }]}>VIP-зал</Text>
-            <Text style={[styles.mapMark, { left: 92, top: 242 }]}>ADMIN</Text>
-            <Text style={[styles.mapMark, { left: 87, top: 618 }]}>WC</Text>
-            <Text style={[styles.mapMark, { left: 86, top: 694 }]}>BAR</Text>
+            <Text style={[styles.mapLabel, { left: 662, top: 545 }]}>VIP-зал</Text>
+            <Text style={[styles.mapMark, { left: 62, top: 620 }]}>ADMIN DESK</Text>
+            <Text style={[styles.mapMark, { left: 90, top: 704 }]}>BAR</Text>
+            <Text style={[styles.mapMark, { left: 666, top: 704 }]}>WC</Text>
 
             {placedSeats.map((seat) => {
               const number = extractSeatNumber(seat);
@@ -899,12 +899,12 @@ const styles = StyleSheet.create({
     position: 'absolute',
   },
   mapSeat: {
-    width: 76,
-    minHeight: 76,
+    width: 94,
+    minHeight: 92,
     borderRadius: 18,
     borderWidth: 1,
-    paddingHorizontal: 8,
-    paddingVertical: 9,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
     justifyContent: 'space-between',
   },
   consoleSeat: {
