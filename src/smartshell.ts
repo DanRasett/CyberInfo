@@ -93,14 +93,15 @@ type SmartShellTariffsResponse = {
   data: SmartShellTariff[];
 };
 
-const GRAPHQL_URLS = env.VITE_SMARTSHELL_GRAPHQL_URL
-  ? [env.VITE_SMARTSHELL_GRAPHQL_URL]
-  : [
-      'https://billing.smartshell.gg/api/graphql',
-      'https://owner.smartshell.gg/api/graphql',
-      'https://mobile-auth.smartshell.gg/api/graphql',
-      'https://host.smartshell.gg/api/graphql',
-    ];
+const DEFAULT_GRAPHQL_URLS = [
+  'https://billing.smartshell.gg/api/graphql',
+  'https://owner.smartshell.gg/api/graphql',
+  'https://mobile-auth.smartshell.gg/api/graphql',
+  'https://host.smartshell.gg/api/graphql',
+];
+const GRAPHQL_URLS = [env.VITE_SMARTSHELL_GRAPHQL_URL, ...DEFAULT_GRAPHQL_URLS].filter(
+  (url, index, list): url is string => typeof url === 'string' && url.length > 0 && list.indexOf(url) === index,
+);
 const COMPANY_ID = env.VITE_SMARTSHELL_COMPANY_ID ? Number(env.VITE_SMARTSHELL_COMPANY_ID) : undefined;
 let workingGraphqlUrl: string | null = null;
 

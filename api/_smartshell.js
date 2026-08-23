@@ -8,11 +8,11 @@ const DEFAULT_GRAPHQL_URLS = [
 let cachedToken = null;
 let workingGraphqlUrl = null;
 
-const GRAPHQL_URLS = process.env.SMARTSHELL_GRAPHQL_URL
-  ? [process.env.SMARTSHELL_GRAPHQL_URL]
-  : process.env.VITE_SMARTSHELL_GRAPHQL_URL
-    ? [process.env.VITE_SMARTSHELL_GRAPHQL_URL]
-    : DEFAULT_GRAPHQL_URLS;
+const GRAPHQL_URLS = [
+  process.env.SMARTSHELL_GRAPHQL_URL,
+  process.env.VITE_SMARTSHELL_GRAPHQL_URL,
+  ...DEFAULT_GRAPHQL_URLS,
+].filter((url, index, list) => typeof url === 'string' && url.length > 0 && list.indexOf(url) === index);
 
 const graphqlAt = async (url, query, token) => {
   const response = await fetch(url, {

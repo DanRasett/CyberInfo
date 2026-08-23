@@ -8,6 +8,13 @@ type GraphqlResponse<T> = {
 
 type SmartShellEnv = Record<string, string>;
 
+const DEFAULT_GRAPHQL_URLS = [
+  'https://billing.smartshell.gg/api/graphql',
+  'https://owner.smartshell.gg/api/graphql',
+  'https://mobile-auth.smartshell.gg/api/graphql',
+  'https://host.smartshell.gg/api/graphql',
+];
+
 const writeJson = (res: import('node:http').ServerResponse, status: number, payload: unknown) => {
   res.statusCode = status;
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
@@ -15,12 +22,14 @@ const writeJson = (res: import('node:http').ServerResponse, status: number, payl
 };
 
 const smartshellApi = (env: SmartShellEnv): Plugin => {
-  const endpoint =
-    env.SMARTSHELL_GRAPHQL_URL || env.VITE_SMARTSHELL_GRAPHQL_URL || 'https://billing.smartshell.gg/api/graphql';
+  const endpoints = [env.SMARTSHELL_GRAPHQL_URL, env.VITE_SMARTSHELL_GRAPHQL_URL, ...DEFAULT_GRAPHQL_URLS].filter(
+    (url, index, list): url is string => typeof url === 'string' && url.length > 0 && list.indexOf(url) === index,
+  );
   const companyId = env.SMARTSHELL_COMPANY_ID || env.VITE_SMARTSHELL_COMPANY_ID;
   let cachedToken: { value: string; expiresAt: number } | null = null;
+  let workingEndpoint: string | null = null;
 
-  const graphql = async <T>(query: string, token?: string): Promise<T> => {
+  const graphqlAt = async <T>(endpoint: string, query: string, token?: string): Promise<T> => {
     const response = await fetch(endpoint, {
       method: 'POST',
       headers: {
@@ -46,6 +55,23 @@ const smartshellApi = (env: SmartShellEnv): Plugin => {
     }
 
     return payload.data;
+  };
+
+  const graphql = async <T>(query: string, token?: string): Promise<T> => {
+    const urls = workingEndpoint ? [workingEndpoint, ...endpoints.filter((url) => url !== workingEndpoint)] : endpoints;
+    const errors: string[] = [];
+
+    for (const endpoint of urls) {
+      try {
+        const data = await graphqlAt<T>(endpoint, query, token);
+        workingEndpoint = endpoint;
+        return data;
+      } catch (error) {
+        errors.push(`${endpoint}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+
+    throw new Error(errors.join('; '));
   };
 
   const getToken = async () => {
