@@ -309,14 +309,7 @@ const isInfiniteSessionHost = (host: SmartShellHost) => {
 
   return (
     mode === 'DISABLED' ||
-    mode === 'HIGH_ACCESS' ||
-    host.locked === true ||
-    text.includes('shell') ||
-    text.includes('high') ||
-    text.includes('access') ||
-    text.includes('снят') ||
-    text.includes('шел') ||
-    text.includes('высок')
+    mode === 'HIGH_ACCESS'
   );
 };
 
