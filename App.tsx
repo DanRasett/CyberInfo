@@ -137,6 +137,23 @@ const formatTimestamp = (value: Date | null) =>
       }).format(value)
     : 'нет данных';
 
+const formatPhoneNumber = (value: string) => {
+  const digits = value.replace(/\D/g, '');
+  const normalized = digits.startsWith('8') ? `7${digits.slice(1)}` : digits.startsWith('7') ? digits : `7${digits}`;
+  const limited = normalized.slice(0, 11);
+  const local = limited.slice(1);
+
+  let result = '+7';
+
+  if (local.length > 0) result += ` (${local.slice(0, 3)}`;
+  if (local.length >= 3) result += ')';
+  if (local.length > 3) result += local.slice(3, 6);
+  if (local.length > 6) result += `-${local.slice(6, 8)}`;
+  if (local.length > 8) result += `-${local.slice(8, 10)}`;
+
+  return result;
+};
+
 const storageGet = (key: string) => {
   if (typeof window === 'undefined') return '';
   return window.localStorage.getItem(key) ?? '';
@@ -158,7 +175,7 @@ const App = () => {
     displayName: 'Сотрудник не определен',
     phone: '',
   });
-  const [transferPhone, setTransferPhone] = useState(() => storageGet(TRANSFER_PHONE_STORAGE_KEY));
+  const [transferPhone, setTransferPhone] = useState(() => formatPhoneNumber(storageGet(TRANSFER_PHONE_STORAGE_KEY)));
   const [transferBank, setTransferBank] = useState(() => storageGet(TRANSFER_BANK_STORAGE_KEY));
 
   useEffect(() => {
@@ -333,10 +350,12 @@ const App = () => {
                     label="Номер телефона"
                     value={transferPhone}
                     onChangeText={(value) => {
-                      setTransferPhone(value);
-                      storageSet(TRANSFER_PHONE_STORAGE_KEY, value);
+                      const formattedValue = formatPhoneNumber(value);
+                      setTransferPhone(formattedValue);
+                      storageSet(TRANSFER_PHONE_STORAGE_KEY, formattedValue);
                     }}
                     placeholder="+7 (___) ___-__-__"
+                    keyboardType="phone-pad"
                   />
                   <FieldBlock
                     label="Банк для перевода"
@@ -389,12 +408,14 @@ const MetricCard = ({
 );
 
 const FieldBlock = ({
+  keyboardType,
   label,
   onChangeText,
   placeholder,
   readonly = false,
   value,
 }: {
+  keyboardType?: 'default' | 'phone-pad';
   label: string;
   onChangeText?: (value: string) => void;
   placeholder?: string;
@@ -411,6 +432,7 @@ const FieldBlock = ({
       <TextInput
         value={value}
         onChangeText={onChangeText}
+        keyboardType={keyboardType}
         placeholder={placeholder}
         placeholderTextColor="#6f8798"
         style={styles.fieldInput}
