@@ -134,11 +134,6 @@ const formatTimestamp = (value: Date | null) =>
       }).format(value)
     : 'нет данных';
 
-const accentToneStyle = {
-  cool: styles.promoCool,
-  warm: styles.promoWarm,
-} as const;
-
 const App = () => {
   const { width, height } = useWindowDimensions();
   const [seats, setSeats] = useState<PcSeat[]>([]);
@@ -297,7 +292,10 @@ const App = () => {
 
               <View style={[styles.promoGrid, isPhone && styles.promoGridPhone]}>
                 {promoBlocks.map((promo) => (
-                  <View key={promo.title} style={[styles.promoCard, accentToneStyle[promo.tone]]}>
+                  <View
+                    key={promo.title}
+                    style={[styles.promoCard, promo.tone === 'cool' ? styles.promoCool : styles.promoWarm]}
+                  >
                     <Text style={styles.promoTitle}>{promo.title}</Text>
                     <Text style={styles.promoText}>{promo.text}</Text>
                   </View>
