@@ -1,9 +1,21 @@
-const GRAPHQL_URL = process.env.SMARTSHELL_GRAPHQL_URL || 'https://billing.smartshell.gg/api/graphql';
+const DEFAULT_GRAPHQL_URLS = [
+  'https://billing.smartshell.gg/api/graphql',
+  'https://owner.smartshell.gg/api/graphql',
+  'https://mobile-auth.smartshell.gg/api/graphql',
+  'https://host.smartshell.gg/api/graphql',
+];
 
 let cachedToken = null;
+let workingGraphqlUrl = null;
 
-const graphql = async (query, token) => {
-  const response = await fetch(GRAPHQL_URL, {
+const GRAPHQL_URLS = process.env.SMARTSHELL_GRAPHQL_URL
+  ? [process.env.SMARTSHELL_GRAPHQL_URL]
+  : process.env.VITE_SMARTSHELL_GRAPHQL_URL
+    ? [process.env.VITE_SMARTSHELL_GRAPHQL_URL]
+    : DEFAULT_GRAPHQL_URLS;
+
+const graphqlAt = async (url, query, token) => {
+  const response = await fetch(url, {
     method: 'POST',
     headers: {
       Accept: 'application/json',
@@ -30,12 +42,32 @@ const graphql = async (query, token) => {
   return payload.data;
 };
 
+const graphql = async (query, token) => {
+  const urls = workingGraphqlUrl
+    ? [workingGraphqlUrl, ...GRAPHQL_URLS.filter((url) => url !== workingGraphqlUrl)]
+    : GRAPHQL_URLS;
+  const errors = [];
+
+  for (const url of urls) {
+    try {
+      const data = await graphqlAt(url, query, token);
+      workingGraphqlUrl = url;
+      return data;
+    } catch (error) {
+      errors.push(`${url}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  throw new Error(errors.join('; '));
+};
+
 const getToken = async () => {
   if (cachedToken && cachedToken.expiresAt > Date.now()) return cachedToken.value;
 
-  const { SMARTSHELL_LOGIN, SMARTSHELL_PASSWORD, SMARTSHELL_COMPANY_ID } = process.env;
+  const { SMARTSHELL_LOGIN, SMARTSHELL_PASSWORD } = process.env;
+  const companyId = process.env.SMARTSHELL_COMPANY_ID || process.env.VITE_SMARTSHELL_COMPANY_ID;
 
-  if (!SMARTSHELL_LOGIN || !SMARTSHELL_PASSWORD || !SMARTSHELL_COMPANY_ID) {
+  if (!SMARTSHELL_LOGIN || !SMARTSHELL_PASSWORD || !companyId) {
     throw new Error('Set SMARTSHELL_LOGIN, SMARTSHELL_PASSWORD and SMARTSHELL_COMPANY_ID');
   }
 
@@ -44,7 +76,7 @@ const getToken = async () => {
       login(input: {
         login:${JSON.stringify(SMARTSHELL_LOGIN)}
         password:${JSON.stringify(SMARTSHELL_PASSWORD)}
-        company_id:${Number(SMARTSHELL_COMPANY_ID)}
+        company_id:${Number(companyId)}
       }) {
         access_token
         expires_in
