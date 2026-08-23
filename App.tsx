@@ -1,23 +1,18 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
-  Modal,
-  Pressable,
   SafeAreaView,
   ScrollView,
   StatusBar,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
-import { AuthProvider } from './src/AuthProvider';
-import { createBooking, getDetailedWorkers, PcSeat } from './src/smartshell';
+import { getDetailedWorkers, PcSeat } from './src/smartshell';
 
-const durationOptions = [1, 2, 3, 4, 5];
 const MAP_SCALE = 0.92;
 const SCROLL_STORAGE_KEY = 'cyberstreet-scroll-y';
+const REFRESH_INTERVAL_MS = 30000;
 
 const statusText: Record<PcSeat['status'], string> = {
   free: 'Свободен',
@@ -27,32 +22,32 @@ const statusText: Record<PcSeat['status'], string> = {
 };
 
 const standardHourly = [
-  { label: 'Будни', one: '90 Р', three: '240 Р', five: '350 Р' },
-  { label: 'Выходные (пт - вс)', one: '100 Р', three: '270 Р', five: '370 Р' },
+  { label: 'Будни', one: '90 ₽', three: '240 ₽', five: '350 ₽' },
+  { label: 'Выходные (пт - вс)', one: '100 ₽', three: '270 ₽', five: '370 ₽' },
 ];
 
 const bootcampHourly = [
-  { label: 'Будни', one: '110 Р', three: '270 Р', five: '390 Р' },
-  { label: 'Выходные (пт - вс)', one: '120 Р', three: '320 Р', five: '420 Р' },
+  { label: 'Будни', one: '110 ₽', three: '270 ₽', five: '390 ₽' },
+  { label: 'Выходные (пт - вс)', one: '120 ₽', three: '320 ₽', five: '420 ₽' },
 ];
 
 const standardPacks = [
-  { label: 'Будни', day: '400 Р', night: '350 Р' },
-  { label: 'Выходные (пт - вс)', day: '500 Р', night: '400 Р' },
+  { label: 'Будни', day: '400 ₽', night: '350 ₽' },
+  { label: 'Выходные (пт - вс)', day: '500 ₽', night: '400 ₽' },
 ];
 
 const bootcampPacks = [
-  { label: 'Будни', day: '600 Р', night: '500 Р' },
-  { label: 'Выходные (пт - вс)', day: '700 Р', night: '550 Р' },
+  { label: 'Будни', day: '600 ₽', night: '500 ₽' },
+  { label: 'Выходные (пт - вс)', day: '700 ₽', night: '550 ₽' },
 ];
 
 const promoBlocks = [
-  { title: 'Лототрон', text: 'Пополни депозит на 400 Р и крути барабан с призами', accent: 'red' },
-  { title: '+100 Р', text: 'Новым клиентам пополним баланс от 200 Р', accent: 'red' },
+  { title: 'Лототрон', text: 'Пополни депозит на 400 ₽ и крути барабан с призами', accent: 'red' },
+  { title: '+100 ₽', text: 'Новым клиентам пополним баланс от 200 ₽', accent: 'red' },
   { title: 'Баланс x2', text: 'В день рождения удвоим твой баланс', accent: 'red' },
-  { title: 'Кибер утро ПН-ПТ 8:00 - 14:00', text: '1 час = 60/80 Р', accent: 'blue' },
-  { title: 'Кибер ПН 21:30 - 08:00 Standard', text: '300 Р', accent: 'blue' },
-  { title: 'Кибер ПН 21:30 - 08:00 Bootcamp', text: '400 Р', accent: 'blue' },
+  { title: 'Кибер утро ПН-ПТ 8:00 - 14:00', text: '1 час = 60/80 ₽', accent: 'blue' },
+  { title: 'Кибер ПН 21:30 - 08:00 Standard', text: '300 ₽', accent: 'blue' },
+  { title: 'Кибер ПН 21:30 - 08:00 Bootcamp', text: '400 ₽', accent: 'blue' },
   { title: 'Акция', text: 'Час игры за отзыв на 2ГИС/Яндекс Карты', accent: 'red' },
 ];
 
@@ -128,13 +123,10 @@ const formatBookingTime = (value: string | null) => {
   return `${day}.${month} ${hours}:${minutes}`;
 };
 
-const AppContent = () => {
+const App = () => {
   const [seats, setSeats] = useState<PcSeat[]>([]);
   const [isLoading, setLoading] = useState(true);
   const [initialScrollY, setInitialScrollY] = useState(0);
-  const [bookingSeat, setBookingSeat] = useState<PcSeat | null>(null);
-  const [hours, setHours] = useState(1);
-  const [phone, setPhone] = useState('');
 
   useEffect(() => {
     const savedScrollY = Number(window.localStorage.getItem(SCROLL_STORAGE_KEY) ?? 0);
@@ -145,7 +137,8 @@ const AppContent = () => {
     let mounted = true;
 
     const load = async (showLoader: boolean) => {
-      if (showLoader) setLoading(true);
+      if (showLoader && mounted) setLoading(true);
+
       try {
         const nextSeats = await getDetailedWorkers();
         if (mounted) setSeats(nextSeats);
@@ -155,7 +148,8 @@ const AppContent = () => {
     };
 
     load(true);
-    const timer = setInterval(() => load(false), 10000);
+    const timer = setInterval(() => load(false), REFRESH_INTERVAL_MS);
+
     return () => {
       mounted = false;
       clearInterval(timer);
@@ -166,21 +160,6 @@ const AppContent = () => {
   const consoles = useMemo(() => seats.filter((seat) => seat.group === 'console'), [seats]);
   const activeCount = useMemo(() => pcs.filter((seat) => seat.isActive).length, [pcs]);
   const freeCount = useMemo(() => pcs.filter((seat) => seat.status === 'free').length, [pcs]);
-  const price = (bookingSeat?.pricePerHour ?? 80) * hours;
-  const finishHour = (new Date().getHours() + hours) % 24;
-
-  const submitBooking = async () => {
-    if (!bookingSeat) return;
-
-    try {
-      await createBooking({ seatId: bookingSeat.id, startsAt: new Date().toISOString(), hours, phone });
-      setBookingSeat(null);
-      Alert.alert('Бронь создана', 'SmartShell принял запрос на бронирование.');
-    } catch {
-      Alert.alert('Заявка сохранена', 'API недоступен, но экран и расчет брони работают.');
-      setBookingSeat(null);
-    }
-  };
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -222,7 +201,7 @@ const AppContent = () => {
                     <LegendDot color="#d34242" label="Обслуживание" />
                   </View>
                 </View>
-                <ClubMap seats={pcs} onBook={setBookingSeat} />
+                <ClubMap seats={pcs} />
               </View>
 
               <View style={styles.tariffArea}>
@@ -240,7 +219,7 @@ const AppContent = () => {
                     <Text style={styles.sectionTitle}>Консоли</Text>
                     <View style={styles.consoleList}>
                       {consoles.map((seat) => (
-                        <SeatCard key={seat.id} seat={seat} onBook={setBookingSeat} compact={false} />
+                        <SeatCard key={seat.id} seat={seat} compact={false} />
                       ))}
                     </View>
                   </View>
@@ -250,50 +229,6 @@ const AppContent = () => {
           </>
         )}
       </ScrollView>
-
-      <Modal visible={Boolean(bookingSeat)} transparent animationType="fade" onRequestClose={() => setBookingSeat(null)}>
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modal}>
-            <Text style={styles.modalTitle}>Забронировать</Text>
-            <Text style={styles.modalSubtitle}>Выберите длительность брони для {bookingSeat?.name}.</Text>
-
-            <Text style={styles.label}>Время</Text>
-            <View style={styles.durationRow}>
-              {durationOptions.map((option) => (
-                <Pressable
-                  key={option}
-                  onPress={() => setHours(option)}
-                  style={[styles.durationButton, hours === option && styles.durationButtonActive]}
-                >
-                  <Text style={[styles.durationText, hours === option && styles.durationTextActive]}>{option} час</Text>
-                </Pressable>
-              ))}
-            </View>
-
-            <Text style={styles.label}>Телефон</Text>
-            <TextInput
-              value={phone}
-              onChangeText={setPhone}
-              placeholder="+7"
-              placeholderTextColor="#777"
-              keyboardType="phone-pad"
-              style={styles.input}
-            />
-
-            <Text style={styles.summary}>Сеанс завершится в {finishHour.toString().padStart(2, '0')}:00</Text>
-            <Text style={styles.price}>Стоимость: {price}₽</Text>
-
-            <View style={styles.modalActions}>
-              <Pressable style={styles.secondaryButton} onPress={() => setBookingSeat(null)}>
-                <Text style={styles.secondaryButtonText}>Отменить</Text>
-              </Pressable>
-              <Pressable style={styles.primaryButton} onPress={submitBooking}>
-                <Text style={styles.primaryButtonText}>Забронировать</Text>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
     </SafeAreaView>
   );
 };
@@ -381,7 +316,7 @@ const PromoGrid = () => (
   </View>
 );
 
-const ClubMap = ({ seats, onBook }: { seats: PcSeat[]; onBook: (seat: PcSeat) => void }) => {
+const ClubMap = ({ seats }: { seats: PcSeat[] }) => {
   const placedSeats = seats.filter((seat) => mapPositions[extractSeatNumber(seat)]);
   const unplacedSeats = seats.filter((seat) => !mapPositions[extractSeatNumber(seat)]);
 
@@ -394,9 +329,9 @@ const ClubMap = ({ seats, onBook }: { seats: PcSeat[]; onBook: (seat: PcSeat) =>
           ))}
 
           <Text style={[styles.mapLabel, { left: 146, top: 70 }]}>Общий зал</Text>
-          <Text style={[styles.mapLabel, { left: 677, top: 452 }]}>ВИП-зал</Text>
-          <Text style={[styles.mapIcon, { left: 91, top: 242 }]}>♙</Text>
-          <Text style={[styles.mapIcon, { left: 93, top: 621 }]}>♚</Text>
+          <Text style={[styles.mapLabel, { left: 677, top: 452 }]}>VIP-зал</Text>
+          <Text style={[styles.mapIcon, { left: 91, top: 242 }]}>♛</Text>
+          <Text style={[styles.mapIcon, { left: 93, top: 621 }]}>✔</Text>
           <Text style={[styles.mapIcon, { left: 91, top: 698 }]}>☕</Text>
           <Text style={[styles.mapArrow, { left: 96, top: 15 }]}>↓</Text>
           <Text style={[styles.mapArrow, { left: 548, top: 471 }]}>→</Text>
@@ -407,7 +342,7 @@ const ClubMap = ({ seats, onBook }: { seats: PcSeat[]; onBook: (seat: PcSeat) =>
             const number = extractSeatNumber(seat);
             return (
               <View key={seat.id} style={[styles.mapSeatPosition, mapPositions[number]]}>
-                <SeatCard seat={seat} onBook={onBook} compact />
+                <SeatCard seat={seat} compact />
               </View>
             );
           })}
@@ -418,7 +353,7 @@ const ClubMap = ({ seats, onBook }: { seats: PcSeat[]; onBook: (seat: PcSeat) =>
         <View style={styles.unplacedRow}>
           <Text style={styles.unplacedTitle}>Не размещены: {unplacedSeats.length}</Text>
           {unplacedSeats.map((seat) => (
-            <SeatCard key={seat.id} seat={seat} onBook={onBook} compact={false} />
+            <SeatCard key={seat.id} seat={seat} compact={false} />
           ))}
         </View>
       )}
@@ -426,26 +361,14 @@ const ClubMap = ({ seats, onBook }: { seats: PcSeat[]; onBook: (seat: PcSeat) =>
   );
 };
 
-const SeatCard = ({
-  seat,
-  onBook,
-  compact,
-}: {
-  seat: PcSeat;
-  onBook: (seat: PcSeat) => void;
-  compact: boolean;
-}) => {
+const SeatCard = ({ seat, compact }: { seat: PcSeat; compact: boolean }) => {
   const number = extractSeatNumber(seat);
   const remaining = formatRemaining(seat.remainingMinutes);
   const bookingTime = formatBookingTime(seat.bookingStartsAt);
   const sessionLabel = seat.isInfiniteSession ? '∞' : remaining;
 
   return (
-    <Pressable
-      disabled={seat.status !== 'free'}
-      onPress={() => onBook(seat)}
-      style={[compact ? styles.mapSeat : styles.consoleSeat, styles[`seat_${seat.status}`]]}
-    >
+    <View style={[compact ? styles.mapSeat : styles.consoleSeat, styles[`seat_${seat.status}`]]}>
       <View style={styles.seatTopRow}>
         <Text style={[styles.seatNumber, seat.status === 'busy' && styles.seatNumberActive]}>{number || seat.name}</Text>
         {seat.status !== 'busy' && <Text style={styles.powerIcon}>⏻</Text>}
@@ -460,17 +383,11 @@ const SeatCard = ({
       ) : (
         <Text style={styles.seatStatus}>{statusText[seat.status]}</Text>
       )}
-    </Pressable>
+    </View>
   );
 };
 
-export default function App() {
-  return (
-    <AuthProvider>
-      <AppContent />
-    </AuthProvider>
-  );
-}
+export default App;
 
 const styles = StyleSheet.create({
   safe: {
@@ -886,108 +803,5 @@ const styles = StyleSheet.create({
     color: '#99a8b8',
     fontSize: 12,
     fontWeight: '800',
-  },
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 18,
-  },
-  modal: {
-    width: '100%',
-    maxWidth: 480,
-    borderRadius: 8,
-    backgroundColor: '#101010',
-    borderWidth: 1,
-    borderColor: '#2a2a2a',
-    padding: 18,
-  },
-  modalTitle: {
-    color: '#fff',
-    fontSize: 28,
-    fontWeight: '900',
-  },
-  modalSubtitle: {
-    color: '#b8b8b8',
-    fontSize: 14,
-    marginTop: 8,
-  },
-  label: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '800',
-    marginTop: 18,
-    marginBottom: 8,
-  },
-  durationRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  durationButton: {
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#333',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  durationButtonActive: {
-    backgroundColor: '#e6c15a',
-    borderColor: '#e6c15a',
-  },
-  durationText: {
-    color: '#d0d0d0',
-    fontWeight: '700',
-  },
-  durationTextActive: {
-    color: '#090909',
-  },
-  input: {
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#333',
-    color: '#fff',
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    fontSize: 16,
-  },
-  summary: {
-    color: '#cfcfcf',
-    marginTop: 16,
-  },
-  price: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: '900',
-    marginTop: 8,
-  },
-  modalActions: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 20,
-  },
-  secondaryButton: {
-    flex: 1,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#333',
-    paddingVertical: 13,
-    alignItems: 'center',
-  },
-  secondaryButtonText: {
-    color: '#fff',
-    fontWeight: '800',
-  },
-  primaryButton: {
-    flex: 1,
-    borderRadius: 8,
-    backgroundColor: '#e6c15a',
-    paddingVertical: 13,
-    alignItems: 'center',
-  },
-  primaryButtonText: {
-    color: '#080808',
-    fontWeight: '900',
   },
 });
