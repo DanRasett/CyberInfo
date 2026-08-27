@@ -189,12 +189,16 @@ const App = () => {
 
   useEffect(() => {
     const sweep = Animated.loop(
-      Animated.timing(transferSweep, {
-        toValue: 1,
-        duration: 2600,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      }),
+      Animated.sequence([
+        Animated.timing(transferSweep, {
+          toValue: 1,
+          duration: 2400,
+          easing: Easing.linear,
+          useNativeDriver: true,
+        }),
+        Animated.delay(120),
+      ]),
+      { resetBeforeIteration: true },
     );
     const pulse = Animated.loop(
       Animated.sequence([
@@ -386,9 +390,9 @@ const App = () => {
                   style={[
                     styles.transferSweep,
                     {
-                      opacity: transferPulse.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [0.12, 0.34],
+                      opacity: transferSweep.interpolate({
+                        inputRange: [0, 0.1, 0.9, 1],
+                        outputRange: [0, 0.34, 0.34, 0],
                       }),
                       transform: [
                         {
