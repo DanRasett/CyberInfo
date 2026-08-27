@@ -1254,7 +1254,7 @@ const styles = StyleSheet.create({
     position: 'relative',
     overflow: 'hidden',
     borderColor: 'rgba(125, 211, 252, 0.18)',
-    shadowColor: '#7dd3fc',
+    shadowColor: '#fffb00',
     shadowOpacity: 0.22,
     shadowRadius: 24,
     shadowOffset: { width: 0, height: 0 },
