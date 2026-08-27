@@ -179,6 +179,7 @@ const App = () => {
   });
   const [transferPhone, setTransferPhone] = useState(() => formatPhoneNumber(storageGet(TRANSFER_PHONE_STORAGE_KEY)));
   const [transferBank, setTransferBank] = useState(() => storageGet(TRANSFER_BANK_STORAGE_KEY));
+  const [operatorName, setOperatorName] = useState(() => storageGet(TRANSFER_BANK_STORAGE_KEY));
   const transferSweep = React.useRef(new Animated.Value(0)).current;
   const transferPulse = React.useRef(new Animated.Value(0)).current;
 
@@ -422,7 +423,7 @@ const App = () => {
                 <Text style={styles.panelEyebrow}>TRANSFER</Text>
                 <Text style={styles.panelTitle}>Номер для перевода</Text>
                 <View style={styles.transferForm}>
-                  <FieldBlock label="Сотрудник на смене" value={shiftOperator.displayName} />
+                  <FieldBlock label="Сотрудник на смене" value={operatorName} />
                   <FieldBlock
                     label="Номер телефона"
                     value={transferPhone}
