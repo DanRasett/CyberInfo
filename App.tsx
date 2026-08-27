@@ -274,6 +274,7 @@ const App = () => {
   const freeCount = useMemo(() => pcs.filter((seat) => seat.status === 'free').length, [pcs]);
   const busyCount = useMemo(() => pcs.filter((seat) => seat.status === 'busy').length, [pcs]);
   const reservedCount = useMemo(() => pcs.filter((seat) => seat.status === 'reserved').length, [pcs]);
+  const isWeekend = [0, 5, 6].includes(now.getDay());
   const occupancy = pcs.length ? Math.round((busyCount / pcs.length) * 100) : 0;
 
   const pagePadding = isPhone ? 14 : isCompact ? 20 : 26;
@@ -366,8 +367,8 @@ const App = () => {
               </View>
 
               <View style={[styles.tariffPanels, isCompact && styles.tariffPanelsCompact]}>
-                <TariffPanel title="Standard" accent="cyan" rows={standardHourly} packs={standardPacks} />
-                <TariffPanel title="Bootcamp" accent="amber" rows={bootcampHourly} packs={bootcampPacks} />
+                <TariffPanel title="Standard" accent="cyan" isWeekend={isWeekend} rows={standardHourly} packs={standardPacks} />
+                <TariffPanel title="Bootcamp" accent="amber" isWeekend={isWeekend} rows={bootcampHourly} packs={bootcampPacks} />
               </View>
 
               <View style={[styles.promoGrid, isPhone && styles.promoGridPhone]}>
@@ -527,11 +528,13 @@ const LegendDot = ({ color, label }: { color: string; label: string }) => (
 const TariffPanel = ({
   title,
   accent,
+  isWeekend,
   rows,
   packs,
 }: {
   title: string;
   accent: 'cyan' | 'amber';
+  isWeekend: boolean;
   rows: Array<{ label: string; one: string; three: string; five: string }>;
   packs: Array<{ label: string; day: string; night: string }>;
 }) => (
@@ -548,14 +551,18 @@ const TariffPanel = ({
       <Text style={styles.rateHeaderCell}>3ч</Text>
       <Text style={styles.rateHeaderCell}>5ч</Text>
     </View>
-    {rows.map((row) => (
-      <View key={row.label} style={styles.rateRow}>
-        <Text style={styles.rateLabel}>{row.label}</Text>
-        <Text style={styles.rateValue}>{row.one}</Text>
-        <Text style={styles.rateValue}>{row.three}</Text>
-        <Text style={styles.rateValue}>{row.five}</Text>
-      </View>
-    ))}
+    {rows.map((row) => {
+      const active = row.label === (isWeekend ? 'Пт - Вс' : 'Будни');
+
+      return (
+        <View key={row.label} style={styles.rateRow}>
+          <Text style={[styles.rateLabel, active ? styles.rateLabelActive : styles.rateLabelInactive]}>{row.label}</Text>
+          <Text style={[styles.rateValue, active ? styles.rateValueActive : styles.rateValueInactive]}>{row.one}</Text>
+          <Text style={[styles.rateValue, active ? styles.rateValueActive : styles.rateValueInactive]}>{row.three}</Text>
+          <Text style={[styles.rateValue, active ? styles.rateValueActive : styles.rateValueInactive]}>{row.five}</Text>
+        </View>
+      );
+    })}
 
     <Text style={[styles.tariffBlockTitle, styles.tariffBlockGap]}>Пакеты</Text>
     <View style={styles.rateHeader}>
@@ -563,17 +570,19 @@ const TariffPanel = ({
       <Text style={styles.rateHeaderCell}>День</Text>
       <Text style={styles.rateHeaderCell}>Ночь</Text>
     </View>
-    {packs.map((row) => (
-      <View key={row.label} style={styles.packRow}>
-        <Text style={styles.rateLabel}>{row.label}</Text>
-        <Text style={styles.packValue}>{row.day}</Text>
-        <Text style={styles.packValue}>{row.night}</Text>
-      </View>
-    ))}
-  </View>
-);
+    {packs.map((row) => {
+      const active = row.label === (isWeekend ? 'Пт - Вс' : 'Будни');
 
-const ClubMap = ({
+      return (
+        <View key={row.label} style={styles.packRow}>
+          <Text style={[styles.rateLabel, active ? styles.rateLabelActive : styles.rateLabelInactive]}>{row.label}</Text>
+          <Text style={[styles.packValue, active ? styles.rateValueActive : styles.rateValueInactive]}>{row.day}</Text>
+          <Text style={[styles.packValue, active ? styles.rateValueActive : styles.rateValueInactive]}>{row.night}</Text>
+        </View>
+      );
+    })}
+  </View>
+);const ClubMap = ({
   seats,
   mapScale,
   compact,
@@ -1189,20 +1198,32 @@ const styles = StyleSheet.create({
   },
   rateLabel: {
     flex: 1.3,
-    color: '#f8fafc',
+    color: '#51606d',
     fontSize: 14,
     fontWeight: '700',
   },
+  rateLabelActive: {
+    color: '#f8fafc',
+  },
+  rateLabelInactive: {
+    color: '#31404c',
+  },
   rateValue: {
     flex: 1,
-    color: '#f8fafc',
+    color: '#51606d',
     fontSize: 18,
     fontWeight: '900',
     textAlign: 'center',
   },
+  rateValueActive: {
+    color: '#f8fafc',
+  },
+  rateValueInactive: {
+    color: '#31404c',
+  },
   packValue: {
     flex: 1,
-    color: '#f8fafc',
+    color: '#51606d',
     fontSize: 18,
     fontWeight: '900',
     textAlign: 'center',
