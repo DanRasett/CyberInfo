@@ -17,6 +17,7 @@ import { getDetailedWorkers, getShiftOperator, PcSeat, ShiftOperator } from './s
 const REFRESH_INTERVAL_MS = 30000;
 const TRANSFER_PHONE_STORAGE_KEY = 'cyberstreet-transfer-phone';
 const TRANSFER_BANK_STORAGE_KEY = 'cyberstreet-transfer-bank';
+const TRANSFER_OPERATOR_STORAGE_KEY = 'cyberstreet-transfer-operator';
 
 const statusText: Record<PcSeat['status'], string> = {
   free: 'Свободен',
@@ -179,7 +180,7 @@ const App = () => {
   });
   const [transferPhone, setTransferPhone] = useState(() => formatPhoneNumber(storageGet(TRANSFER_PHONE_STORAGE_KEY)));
   const [transferBank, setTransferBank] = useState(() => storageGet(TRANSFER_BANK_STORAGE_KEY));
-  const [operatorName, setOperatorName] = useState(() => storageGet(TRANSFER_BANK_STORAGE_KEY));
+  const [operatorName, setOperatorName] = useState(() => storageGet(TRANSFER_OPERATOR_STORAGE_KEY));
   const transferSweep = React.useRef(new Animated.Value(0)).current;
   const transferPulse = React.useRef(new Animated.Value(0)).current;
 
@@ -423,7 +424,15 @@ const App = () => {
                 <Text style={styles.panelEyebrow}>TRANSFER</Text>
                 <Text style={styles.panelTitle}>Номер для перевода</Text>
                 <View style={styles.transferForm}>
-                  <FieldBlock label="Сотрудник на смене" value={operatorName} />
+                  <FieldBlock
+                    label="Отображаемое имя"
+                    value={operatorName}
+                    onChangeText={(value) => {
+                      setOperatorName(value);
+                      storageSet(TRANSFER_OPERATOR_STORAGE_KEY, value);
+                    }}
+                    placeholder="Иван"
+                  />
                   <FieldBlock
                     label="Номер телефона"
                     value={transferPhone}
