@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Animated,
+  Easing,
   SafeAreaView,
   ScrollView,
   StatusBar,
@@ -177,11 +179,48 @@ const App = () => {
   });
   const [transferPhone, setTransferPhone] = useState(() => formatPhoneNumber(storageGet(TRANSFER_PHONE_STORAGE_KEY)));
   const [transferBank, setTransferBank] = useState(() => storageGet(TRANSFER_BANK_STORAGE_KEY));
+  const transferSweep = React.useRef(new Animated.Value(0)).current;
+  const transferPulse = React.useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    const sweep = Animated.loop(
+      Animated.timing(transferSweep, {
+        toValue: 1,
+        duration: 2600,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      }),
+    );
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(transferPulse, {
+          toValue: 1,
+          duration: 900,
+          easing: Easing.inOut(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.timing(transferPulse, {
+          toValue: 0,
+          duration: 900,
+          easing: Easing.inOut(Easing.quad),
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+
+    sweep.start();
+    pulse.start();
+
+    return () => {
+      sweep.stop();
+      pulse.stop();
+    };
+  }, [transferPulse, transferSweep]);
 
   useEffect(() => {
     let mounted = true;
@@ -341,7 +380,40 @@ const App = () => {
             </View>
 
             <View style={styles.bottomRow}>
-              <View style={[styles.panel, styles.summaryPanel]}>
+              <View style={[styles.panel, styles.summaryPanel, styles.transferHighlightShell]}>
+                <Animated.View
+                  pointerEvents="none"
+                  style={[
+                    styles.transferSweep,
+                    {
+                      opacity: transferPulse.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [0.12, 0.34],
+                      }),
+                      transform: [
+                        {
+                          translateX: transferSweep.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [-240, 380],
+                          }),
+                        },
+                        { rotate: '18deg' },
+                      ],
+                    },
+                  ]}
+                />
+                <Animated.View
+                  pointerEvents="none"
+                  style={[
+                    styles.transferHalo,
+                    {
+                      opacity: transferPulse.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [0.22, 0.48],
+                      }),
+                    },
+                  ]}
+                />
                 <Text style={styles.panelEyebrow}>TRANSFER</Text>
                 <Text style={styles.panelTitle}>Перевод сотруднику</Text>
                 <View style={styles.transferForm}>
@@ -1177,6 +1249,37 @@ const styles = StyleSheet.create({
   summaryPanel: {
     flex: 0.86,
     minWidth: 280,
+  },
+  transferHighlightShell: {
+    position: 'relative',
+    overflow: 'hidden',
+    borderColor: 'rgba(125, 211, 252, 0.18)',
+    shadowColor: '#7dd3fc',
+    shadowOpacity: 0.22,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 0 },
+  },
+  transferHalo: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    borderRadius: 28,
+    backgroundColor: 'rgba(125, 211, 252, 0.06)',
+  },
+  transferSweep: {
+    position: 'absolute',
+    top: -80,
+    bottom: -80,
+    width: 150,
+    left: 0,
+    borderRadius: 80,
+    backgroundColor: 'rgba(125, 211, 252, 0.35)',
+    shadowColor: '#7dd3fc',
+    shadowOpacity: 0.65,
+    shadowRadius: 28,
+    shadowOffset: { width: 0, height: 0 },
   },
   consolePanel: {
     flex: 1.14,
