@@ -420,7 +420,7 @@ const App = () => {
                   ]}
                 />
                 <Text style={styles.panelEyebrow}>TRANSFER</Text>
-                <Text style={styles.panelTitle}>Перевод сотруднику</Text>
+                <Text style={styles.panelTitle}>Номер для перевода</Text>
                 <View style={styles.transferForm}>
                   <FieldBlock label="Сотрудник на смене" value={shiftOperator.displayName} readonly />
                   <FieldBlock
