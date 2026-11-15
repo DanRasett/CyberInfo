@@ -1,7 +1,43 @@
 node_modules
 dist
+build
+coverage
+.cache
+
+# Environment files and secrets
 .env
 .env.local
+.env.*
+!.env.example
+
+# Deployment and framework metadata
 .vercel
 .expo
+
+# Logs and local reports
+*.log
 npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+playwright-report/
+test-results/
+
+# Local AI assistant and agent settings
+.codex/
+.impeccable/
+.agents/
+.claude/
+.cursor/
+.windsurf/
+.aider*
+AGENTS.local.md
+CLAUDE.local.md
+AGENTS.md
+
+# Local browser dumps and temporary build checks
+edge-check/
+edge-dump/
+tmp_build_verify/
+tmp/
+temp/

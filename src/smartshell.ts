@@ -28,6 +28,11 @@ export type ShiftOperator = {
   phone: string;
 };
 
+export type SmartShellResult<T> = {
+  data: T;
+  source: 'live' | 'fallback';
+};
+
 type SmartShellHost = {
   id: number;
   group_id?: number;
@@ -289,14 +294,16 @@ const sortHosts = (hosts: SmartShellHost[]) =>
     return hostSortValue(a) - hostSortValue(b);
   });
 
-export const getDetailedWorkers = async (): Promise<PcSeat[]> => {
+export const getDetailedWorkersWithStatus = async (): Promise<SmartShellResult<PcSeat[]>> => {
   try {
     const hosts = await requestLocalApi<SmartShellHost[]>('/api/smartshell/hosts');
-    return sortHosts(hosts).map(normalizeHost);
+    return { data: sortHosts(hosts).map(normalizeHost), source: 'live' };
   } catch {
-    return fallbackSeats;
+    return { data: fallbackSeats, source: 'fallback' };
   }
 };
+
+export const getDetailedWorkers = async (): Promise<PcSeat[]> => (await getDetailedWorkersWithStatus()).data;
 
 export const getTariffs = async (): Promise<Tariff[]> => {
   try {
@@ -310,11 +317,13 @@ export const getTariffs = async (): Promise<Tariff[]> => {
   }
 };
 
-export const getShiftOperator = async (): Promise<ShiftOperator> => {
+export const getShiftOperatorWithStatus = async (): Promise<SmartShellResult<ShiftOperator>> => {
   try {
     const shift = await requestLocalApi<SmartShellActiveShift | null>('/api/smartshell/shift');
-    return normalizeShiftOperator(shift);
+    return { data: normalizeShiftOperator(shift), source: 'live' };
   } catch {
-    return fallbackShiftOperator;
+    return { data: fallbackShiftOperator, source: 'fallback' };
   }
 };
+
+export const getShiftOperator = async (): Promise<ShiftOperator> => (await getShiftOperatorWithStatus()).data;

@@ -6,24 +6,74 @@ body,
 }
 
 html {
-  background:
-    radial-gradient(circle at top left, rgba(56, 189, 248, 0.12), transparent 30%),
-    radial-gradient(circle at top right, rgba(245, 158, 11, 0.12), transparent 26%),
-    linear-gradient(180deg, #09111a 0%, #050b11 48%, #04070b 100%);
+  background: #0B1118;
+}
+
+@font-face {
+  font-family: "Bravo";
+  src: url("./assets/fonts/BravoRG.otf") format("opentype");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
 }
 
 body {
-  color: #f8fafc;
-  font-family: Aptos, "Segoe UI", "Trebuchet MS", sans-serif;
+  color: #000;
+  font-family: "Bravo", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
 }
 
-#root {
-  isolation: isolate;
+button,
+input {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+*:focus-visible {
+  outline: 3px solid #83B8FF;
+  outline-offset: 3px;
 }
 
 * {
   box-sizing: border-box;
+}
+
+.theme-dark,
+.theme-light {
+  transition: background-color 260ms ease, color 260ms ease;
+}
+
+.transfer-sweep {
+  animation: transfer-sweep 3.1s linear infinite;
+}
+
+.transfer-halo {
+  animation: transfer-halo 1.8s ease-in-out infinite alternate;
+}
+
+@keyframes transfer-sweep {
+  0% { opacity: 0; transform: translateX(-180px) rotate(18deg); }
+  12%, 88% { opacity: 0.58; }
+  100% { opacity: 0; transform: translateX(620px) rotate(18deg); }
+}
+
+@keyframes transfer-halo {
+  from { opacity: 0.06; }
+  to { opacity: 0.24; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .transfer-sweep,
+  .transfer-halo { animation: none; }
+}
+
+.nav-button,
+.theme-button,
+.outline-button,
+.primary-button {
+  border: 0;
 }
