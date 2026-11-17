@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type Dispatch, type DragEvent, type PointerEvent, type ReactNode, type SetStateAction } from "react";
-import { getDetailedWorkersWithStatus, getTariffs, type PcSeat, type Tariff as SmartShellTariff } from "./src/smartshell";
+import { getDetailedWorkersWithStatus, type PcSeat } from "./src/smartshell";
 
 type ItemType =
   | "computer"
@@ -28,13 +28,23 @@ type MapItem = {
 
 type Point = { x: number; y: number };
 type Wall = { id: string; points: Point[] };
-type Tariff = { id: string; name: string; duration: string; day: string; night: string };
+type Tariff = { id: string; name: string; duration: string; day: string; night: string; mode?: "hourly" | "package" };
 type Promotion = { id: string; title: string; description: string };
 type EditorSection = "map" | "tariffs" | "promotions";
 type EditorTool = "select" | "wall" | ItemType;
+type HostState = "loading" | "live" | "fallback";
 
 const CANVAS_WIDTH = 1200;
 const CANVAS_HEIGHT = 720;
+const GRID_SIZE = 20;
+
+const snapToGrid = (value: number, max: number) =>
+  Math.max(0, Math.min(max, Math.round(value / GRID_SIZE) * GRID_SIZE));
+
+const snapPointToGrid = (point: Point): Point => ({
+  x: snapToGrid(point.x, CANVAS_WIDTH),
+  y: snapToGrid(point.y, CANVAS_HEIGHT),
+});
 
 const computerPositions = [
   [155, 150],
@@ -119,27 +129,32 @@ const initialWalls: Wall[] = [
 ];
 
 const initialTariffs: Tariff[] = [
-  { id: "t-1", name: "Стандарт", duration: "1 час", day: "150", night: "180" },
-  { id: "t-2", name: "Стандарт", duration: "3 часа", day: "390", night: "450" },
-  { id: "t-3", name: "Стандарт", duration: "5 часов", day: "590", night: "690" },
-  { id: "t-4", name: "Bootcamp", duration: "3 часа", day: "490", night: "550" },
+  { id: "standard-hour-1", name: "STANDART", duration: "1 час", day: "100", night: "110", mode: "hourly" },
+  { id: "standard-hour-3", name: "STANDART", duration: "3 часа", day: "270", night: "290", mode: "hourly" },
+  { id: "standard-hour-5", name: "STANDART", duration: "5 часов", day: "370", night: "400", mode: "hourly" },
+  { id: "standard-package-weekdays", name: "STANDART · ПАКЕТЫ", duration: "Будни · 10:00–19:00 / 21:30–08:00", day: "400", night: "350", mode: "package" },
+  { id: "standard-package-weekend", name: "STANDART · ПАКЕТЫ", duration: "Выходные · 10:00–19:00 / 21:30–08:00", day: "500", night: "400", mode: "package" },
+  { id: "bootcamp-hour-1", name: "BOOTCAMP", duration: "1 час", day: "120", night: "130", mode: "hourly" },
+  { id: "bootcamp-hour-3", name: "BOOTCAMP", duration: "3 часа", day: "320", night: "350", mode: "hourly" },
+  { id: "bootcamp-hour-5", name: "BOOTCAMP", duration: "5 часов", day: "420", night: "450", mode: "hourly" },
+  { id: "bootcamp-package-weekdays", name: "BOOTCAMP · ПАКЕТЫ", duration: "Будни · 10:00–19:00 / 21:30–08:00", day: "600", night: "500", mode: "package" },
+  { id: "bootcamp-package-weekend", name: "BOOTCAMP · ПАКЕТЫ", duration: "Выходные · 10:00–19:00 / 21:30–08:00", day: "700", night: "550", mode: "package" },
 ];
 
 const initialPromotions: Promotion[] = [
-  {
-    id: "p-1",
-    title: "Ночной пакет",
-    description: "8 часов игры ежедневно с 22:00 до 08:00 за 990 ₽",
-  },
-  {
-    id: "p-2",
-    title: "+100 ₽ новым гостям",
-    description: "Бонус при первом пополнении баланса от 500 ₽",
-  },
+  { id: "p-lottery", title: "ЛОТОТРОН", description: "Пополни депозит на 400 ₽ и крути барабан с призами" },
+  { id: "p-bonus", title: "+100 ₽ НОВЫМ КЛИЕНТАМ", description: "Пополняем баланс новым клиентам от 200 ₽" },
+  { id: "p-birthday", title: "БАЛАНС X2", description: "В день рождения удвоим твой баланс" },
+  { id: "p-morning", title: "КИБЕР УТРО ПН–ПТ", description: "08:00–14:00 · 1 час = 60 / 80 ₽" },
+  { id: "p-standard-night", title: "КИБЕР ПН · STANDART", description: "21:30–08:00 · 300 ₽" },
+  { id: "p-bootcamp-night", title: "КИБЕР ПН · BOOTCAMP", description: "21:30–08:00 · 400 ₽" },
+  { id: "p-review", title: "АКЦИЯ", description: "Час игры за отзыв на 2ГИС / Яндекс Карты" },
 ];
 
 const REFRESH_INTERVAL_MS = 30000;
 const STORAGE_PREFIX = "cyberstreet-design-";
+const TARIFFS_STORAGE_KEY = "tariffs-v2";
+const PROMOTIONS_STORAGE_KEY = "promotions-v2";
 
 const readStored = <T,>(key: string, fallback: T): T => {
   if (typeof window === "undefined") return fallback;
@@ -199,13 +214,15 @@ const mergeSeatsIntoItems = (current: MapItem[], seats: PcSeat[]) => {
   ];
 };
 
-const mapSmartShellTariffs = (tariffs: SmartShellTariff[]): Tariff[] => tariffs.map((tariff) => ({
-  id: tariff.id,
-  name: tariff.title,
-  duration: `${tariff.durationHours} ${tariff.durationHours === 1 ? "час" : "часа"}`,
-  day: String(tariff.price),
-  night: String(tariff.price),
-}));
+const snapItemToGrid = (item: MapItem): MapItem => ({
+  ...item,
+  ...snapPointToGrid(item),
+});
+
+const snapWallToGrid = (wall: Wall): Wall => ({
+  ...wall,
+  points: wall.points.map(snapPointToGrid),
+});
 
 const palette: { type: ItemType; label: string }[] = [
   { type: "computer", label: "Компьютер" },
@@ -315,10 +332,12 @@ function ClubMap({
   items,
   walls,
   className = "",
+  statusMessage,
 }: {
   items: MapItem[];
   walls: Wall[];
   className?: string;
+  statusMessage?: string;
 }) {
   return (
     <div className={`club-map ${className}`}>
@@ -333,17 +352,89 @@ function ClubMap({
       {items.map((item) => (
         <MapObject item={item} key={item.id} />
       ))}
+      {statusMessage && (
+        <div className="map-empty-state" role="status" aria-live="polite">
+          <span>{statusMessage}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const tariffGroupName = (name: string) => name.split(" · ")[0];
+
+function TariffBoard({ tariffs }: { tariffs: Tariff[] }) {
+  const groups = Array.from(new Set(tariffs.map((tariff) => tariffGroupName(tariff.name))));
+
+  return (
+    <div className="tariff-board">
+      {groups.map((group) => {
+        const groupTariffs = tariffs.filter((tariff) => tariffGroupName(tariff.name) === group);
+        const hourly = groupTariffs.filter((tariff) => tariff.mode !== "package");
+        const packages = groupTariffs.filter((tariff) => tariff.mode === "package");
+
+        return (
+          <section className="tariff-group" key={group}>
+            <div className="tariff-group-heading">
+              <h3>{group}</h3>
+              <span>ЦЕНЫ КЛУБА</span>
+            </div>
+
+            {hourly.length > 0 && (
+              <table className="tariff-table tariff-hourly-table">
+                <thead>
+                  <tr>
+                    <th scope="col">ЧАСЫ</th>
+                    {hourly.map((tariff) => <th scope="col" key={tariff.id}>{tariff.duration}</th>)}
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <th scope="row">БУДНИ</th>
+                    {hourly.map((tariff) => <td key={`${tariff.id}-day`}>{tariff.day} ₽</td>)}
+                  </tr>
+                  <tr>
+                    <th scope="row">ВЫХОДНЫЕ<span>(ПТ–ВС)</span></th>
+                    {hourly.map((tariff) => <td key={`${tariff.id}-weekend`}>{tariff.night} ₽</td>)}
+                  </tr>
+                </tbody>
+              </table>
+            )}
+
+            {packages.length > 0 && (
+              <table className="tariff-table tariff-package-table">
+                <thead>
+                  <tr>
+                    <th scope="col">ПАКЕТЫ</th>
+                    <th scope="col">ДНЕВНОЙ<span>10:00–19:00</span></th>
+                    <th scope="col">НОЧНОЙ<span>21:30–08:00</span></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {packages.map((tariff) => (
+                    <tr key={tariff.id}>
+                      <th scope="row">{tariff.duration.split(" · ")[0]}</th>
+                      <td>{tariff.day} ₽</td>
+                      <td>{tariff.night} ₽</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </section>
+        );
+      })}
     </div>
   );
 }
 
 export default function App() {
   const [view, setView] = useState<"overview" | "editor">("overview");
-  const [items, setItems] = useState<MapItem[]>(() => readStored("items", initialItems));
-  const [walls, setWalls] = useState<Wall[]>(() => readStored("walls", initialWalls));
-  const [tariffs, setTariffs] = useState<Tariff[]>(() => readStored("tariffs", initialTariffs));
-  const [promotions, setPromotions] = useState<Promotion[]>(() => readStored("promotions", initialPromotions));
-  const [isLoading, setIsLoading] = useState(true);
+  const [items, setItems] = useState<MapItem[]>(() => readStored<MapItem[]>("items", []).map(snapItemToGrid));
+  const [walls, setWalls] = useState<Wall[]>(() => readStored<Wall[]>("walls", []).map(snapWallToGrid));
+  const [tariffs, setTariffs] = useState<Tariff[]>(() => readStored(TARIFFS_STORAGE_KEY, initialTariffs));
+  const [promotions, setPromotions] = useState<Promotion[]>(() => readStored(PROMOTIONS_STORAGE_KEY, initialPromotions));
+  const [hostState, setHostState] = useState<HostState>("loading");
   const freeCount = items.filter(
     (item) => item.type === "computer" && item.status === "free",
   ).length;
@@ -353,10 +444,20 @@ export default function App() {
     let mounted = true;
 
     const loadSeats = async () => {
-      const result = await getDetailedWorkersWithStatus();
-      if (!mounted) return;
-      setItems((current) => mergeSeatsIntoItems(current, result.data));
-      setIsLoading(false);
+      try {
+        const result = await getDetailedWorkersWithStatus();
+        if (!mounted) return;
+        if (result.source === "live") {
+          setItems((current) => mergeSeatsIntoItems(current, result.data));
+        } else {
+          setItems((current) => current.filter((item) => item.type !== "computer"));
+        }
+        setHostState(result.source);
+      } catch {
+        if (!mounted) return;
+        setItems((current) => current.filter((item) => item.type !== "computer"));
+        setHostState("fallback");
+      }
     };
 
     loadSeats();
@@ -370,22 +471,15 @@ export default function App() {
     };
   }, []);
 
-  useEffect(() => {
-    let mounted = true;
-    getTariffs().then((result) => {
-      if (mounted && result.length > 0) setTariffs(mapSmartShellTariffs(result));
-    });
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
   const saveChanges = () => {
     storeValue("items", items);
     storeValue("walls", walls);
-    storeValue("tariffs", tariffs);
-    storeValue("promotions", promotions);
+    storeValue(TARIFFS_STORAGE_KEY, tariffs);
+    storeValue(PROMOTIONS_STORAGE_KEY, promotions);
   };
+  const mapStatusMessage = hostState !== "live" || computerCount === 0
+    ? "Скоро работа карты будет восстановлена"
+    : undefined;
 
   return (
     <main className="app-shell">
@@ -442,7 +536,7 @@ export default function App() {
           </section>
 
           <div className="overview-grid">
-            <section className="map-panel" aria-busy={isLoading}>
+            <section className="map-panel" aria-busy={hostState === "loading"}>
               <div className="section-bar">
                 <div>
                   <span>ПЛАНИРОВКА</span>
@@ -459,7 +553,7 @@ export default function App() {
                   </span>
                 </div>
               </div>
-              <ClubMap items={items} walls={walls} />
+              <ClubMap items={items} walls={walls} statusMessage={mapStatusMessage} />
             </section>
 
             <aside className="overview-side">
@@ -470,24 +564,7 @@ export default function App() {
                     <h2>Стоимость игры</h2>
                   </div>
                 </div>
-                <div className="tariff-list">
-                  {tariffs.map((tariff) => (
-                    <div className="tariff-line" key={tariff.id}>
-                      <div>
-                        <strong>{tariff.name}</strong>
-                        <span>{tariff.duration}</span>
-                      </div>
-                      <div>
-                        <small>ДЕНЬ</small>
-                        <strong>{tariff.day} ₽</strong>
-                      </div>
-                      <div>
-                        <small>НОЧЬ</small>
-                        <strong>{tariff.night} ₽</strong>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                <TariffBoard tariffs={tariffs} />
               </section>
               <section className="promotions-panel">
                 <p className="eyebrow">АКЦИИ КЛУБА</p>
@@ -549,10 +626,10 @@ function Editor({
 
   const pointFromEvent = (event: PointerEvent<HTMLDivElement> | DragEvent<HTMLDivElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
-    return {
+    return snapPointToGrid({
       x: Math.round(((event.clientX - rect.left) / rect.width) * CANVAS_WIDTH),
       y: Math.round(((event.clientY - rect.top) / rect.height) * CANVAS_HEIGHT),
-    };
+    });
   };
 
   const addItem = (type: ItemType, point: Point) => {
@@ -698,18 +775,13 @@ function Editor({
                 onPointerMove={(event) => {
                   if (!drawing || tool !== "wall") return;
                   const point = pointFromEvent(event);
-                  setDraft((current) => {
-                    const last = current[current.length - 1];
-                    return !last || Math.hypot(point.x - last.x, point.y - last.y) >= 3
-                      ? [...current, point]
-                      : current;
-                  });
+                  setDraft((current) => current.length > 0 ? [current[0], point] : [point]);
                 }}
                 onPointerUp={() => {
-                  if (draft.length > 1) {
+                  if (drawing && draft.length > 1 && (draft[0].x !== draft[1].x || draft[0].y !== draft[1].y)) {
                     setWalls((current) => [
                       ...current,
-                      { id: `wall-${Date.now()}`, points: draft },
+                      { id: `wall-${Date.now()}`, points: [draft[0], draft[1]] },
                     ]);
                   }
                   setDraft([]);
