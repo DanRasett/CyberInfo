@@ -27,6 +27,7 @@ type MapItem = {
 };
 
 type Point = { x: number; y: number };
+type MapSize = { width: number; height: number };
 type Wall = { id: string; points: Point[] };
 type Tariff = { id: string; name: string; duration: string; day: string; night: string; mode?: "hourly" | "package" };
 type Promotion = { id: string; title: string; description: string };
@@ -37,13 +38,30 @@ type HostState = "loading" | "live" | "fallback";
 const CANVAS_WIDTH = 1200;
 const CANVAS_HEIGHT = 720;
 const GRID_SIZE = 20;
+const DEFAULT_MAP_SIZE: MapSize = { width: CANVAS_WIDTH, height: CANVAS_HEIGHT };
+const MAP_SIZE_LIMITS = {
+  minWidth: 800,
+  maxWidth: 2400,
+  minHeight: 480,
+  maxHeight: 1440,
+};
 
 const snapToGrid = (value: number, max: number) =>
   Math.max(0, Math.min(max, Math.round(value / GRID_SIZE) * GRID_SIZE));
 
-const snapPointToGrid = (point: Point): Point => ({
-  x: snapToGrid(point.x, CANVAS_WIDTH),
-  y: snapToGrid(point.y, CANVAS_HEIGHT),
+const normalizeMapSize = (size: MapSize): MapSize => {
+  const width = Number.isFinite(size.width) ? Math.round(size.width) : DEFAULT_MAP_SIZE.width;
+  const height = Number.isFinite(size.height) ? Math.round(size.height) : DEFAULT_MAP_SIZE.height;
+
+  return {
+    width: Math.max(MAP_SIZE_LIMITS.minWidth, Math.min(MAP_SIZE_LIMITS.maxWidth, width)),
+    height: Math.max(MAP_SIZE_LIMITS.minHeight, Math.min(MAP_SIZE_LIMITS.maxHeight, height)),
+  };
+};
+
+const snapPointToGrid = (point: Point, mapSize: MapSize = DEFAULT_MAP_SIZE): Point => ({
+  x: snapToGrid(point.x, mapSize.width),
+  y: snapToGrid(point.y, mapSize.height),
 });
 
 const computerPositions = [
@@ -153,6 +171,7 @@ const initialPromotions: Promotion[] = [
 
 const REFRESH_INTERVAL_MS = 30000;
 const STORAGE_PREFIX = "cyberstreet-design-";
+const MAP_SIZE_STORAGE_KEY = "map-size-v1";
 const TARIFFS_STORAGE_KEY = "tariffs-v2";
 const PROMOTIONS_STORAGE_KEY = "promotions-v2";
 
@@ -214,14 +233,14 @@ const mergeSeatsIntoItems = (current: MapItem[], seats: PcSeat[]) => {
   ];
 };
 
-const snapItemToGrid = (item: MapItem): MapItem => ({
+const snapItemToGrid = (item: MapItem, mapSize: MapSize = DEFAULT_MAP_SIZE): MapItem => ({
   ...item,
-  ...snapPointToGrid(item),
+  ...snapPointToGrid(item, mapSize),
 });
 
-const snapWallToGrid = (wall: Wall): Wall => ({
+const snapWallToGrid = (wall: Wall, mapSize: MapSize = DEFAULT_MAP_SIZE): Wall => ({
   ...wall,
-  points: wall.points.map(snapPointToGrid),
+  points: wall.points.map((point) => snapPointToGrid(point, mapSize)),
 });
 
 const palette: { type: ItemType; label: string }[] = [
@@ -286,11 +305,13 @@ function Icon({ type }: { type: EditorTool }) {
 
 function MapObject({
   item,
+  mapSize,
   editor,
   selected,
   onSelect,
 }: {
   item: MapItem;
+  mapSize: MapSize;
   editor?: boolean;
   selected?: boolean;
   onSelect?: () => void;
@@ -300,8 +321,8 @@ function MapObject({
     <button
       className={`map-object ${item.type} ${item.status ?? ""} ${selected ? "selected" : ""}`}
       style={{
-        left: `${(item.x / CANVAS_WIDTH) * 100}%`,
-        top: `${(item.y / CANVAS_HEIGHT) * 100}%`,
+        left: `${(item.x / mapSize.width) * 100}%`,
+        top: `${(item.y / mapSize.height) * 100}%`,
       }}
       draggable={editor}
       onDragStart={(event) => event.dataTransfer.setData("map-item-id", item.id)}
@@ -316,7 +337,7 @@ function MapObject({
           <span className="object-number">{String(item.number).padStart(2, "0")}</span>
           <i />
           <Icon type="computer" />
-          <small>{item.status === "free" ? "Свободен" : item.remaining}</small>
+          <small className="pc-time">{item.status === "free" ? "Свободен" : item.remaining}</small>
         </>
       ) : (
         <>
@@ -331,17 +352,19 @@ function MapObject({
 function ClubMap({
   items,
   walls,
+  mapSize,
   className = "",
   statusMessage,
 }: {
   items: MapItem[];
   walls: Wall[];
+  mapSize: MapSize;
   className?: string;
   statusMessage?: string;
 }) {
   return (
-    <div className={`club-map ${className}`}>
-      <svg className="wall-layer" viewBox={`0 0 ${CANVAS_WIDTH} ${CANVAS_HEIGHT}`}>
+    <div className={`club-map ${className}`} style={{ aspectRatio: `${mapSize.width} / ${mapSize.height}` }}>
+      <svg className="wall-layer" viewBox={`0 0 ${mapSize.width} ${mapSize.height}`}>
         {walls.map((wall) => (
           <polyline
             points={wall.points.map((point) => `${point.x},${point.y}`).join(" ")}
@@ -350,7 +373,7 @@ function ClubMap({
         ))}
       </svg>
       {items.map((item) => (
-        <MapObject item={item} key={item.id} />
+        <MapObject item={item} mapSize={mapSize} key={item.id} />
       ))}
       {statusMessage && (
         <div className="map-empty-state" role="status" aria-live="polite">
@@ -430,8 +453,10 @@ function TariffBoard({ tariffs }: { tariffs: Tariff[] }) {
 
 export default function App() {
   const [view, setView] = useState<"overview" | "editor">("overview");
-  const [items, setItems] = useState<MapItem[]>(() => readStored<MapItem[]>("items", []).map(snapItemToGrid));
-  const [walls, setWalls] = useState<Wall[]>(() => readStored<Wall[]>("walls", []).map(snapWallToGrid));
+  const [mapSize, setMapSize] = useState<MapSize>(() => normalizeMapSize(readStored<MapSize>(MAP_SIZE_STORAGE_KEY, DEFAULT_MAP_SIZE)));
+  const mapSizeRef = useRef(mapSize);
+  const [items, setItems] = useState<MapItem[]>(() => readStored<MapItem[]>("items", []).map((item) => snapItemToGrid(item, mapSize)));
+  const [walls, setWalls] = useState<Wall[]>(() => readStored<Wall[]>("walls", []).map((wall) => snapWallToGrid(wall, mapSize)));
   const [tariffs, setTariffs] = useState<Tariff[]>(() => readStored(TARIFFS_STORAGE_KEY, initialTariffs));
   const [promotions, setPromotions] = useState<Promotion[]>(() => readStored(PROMOTIONS_STORAGE_KEY, initialPromotions));
   const [hostState, setHostState] = useState<HostState>("loading");
@@ -441,6 +466,17 @@ export default function App() {
   const computerCount = items.filter((item) => item.type === "computer").length;
 
   useEffect(() => {
+    mapSizeRef.current = mapSize;
+  }, [mapSize]);
+
+  const updateMapSize = (changes: Partial<MapSize>) => {
+    const nextSize = normalizeMapSize({ ...mapSize, ...changes });
+    setMapSize(nextSize);
+    setItems((current) => current.map((item) => snapItemToGrid(item, nextSize)));
+    setWalls((current) => current.map((wall) => snapWallToGrid(wall, nextSize)));
+  };
+
+  useEffect(() => {
     let mounted = true;
 
     const loadSeats = async () => {
@@ -448,7 +484,7 @@ export default function App() {
         const result = await getDetailedWorkersWithStatus();
         if (!mounted) return;
         if (result.source === "live") {
-          setItems((current) => mergeSeatsIntoItems(current, result.data));
+          setItems((current) => mergeSeatsIntoItems(current, result.data).map((item) => snapItemToGrid(item, mapSizeRef.current)));
         } else {
           setItems((current) => current.filter((item) => item.type !== "computer"));
         }
@@ -474,6 +510,7 @@ export default function App() {
   const saveChanges = () => {
     storeValue("items", items);
     storeValue("walls", walls);
+    storeValue(MAP_SIZE_STORAGE_KEY, mapSize);
     storeValue(TARIFFS_STORAGE_KEY, tariffs);
     storeValue(PROMOTIONS_STORAGE_KEY, promotions);
   };
@@ -515,6 +552,8 @@ export default function App() {
           setTariffs={setTariffs}
           promotions={promotions}
           setPromotions={setPromotions}
+          mapSize={mapSize}
+          onMapSizeChange={updateMapSize}
           onSave={saveChanges}
           onExit={() => setView("overview")}
         />
@@ -553,7 +592,7 @@ export default function App() {
                   </span>
                 </div>
               </div>
-              <ClubMap items={items} walls={walls} statusMessage={mapStatusMessage} />
+              <ClubMap items={items} walls={walls} mapSize={mapSize} statusMessage={mapStatusMessage} />
             </section>
 
             <aside className="overview-side">
@@ -598,6 +637,8 @@ type EditorProps = {
   setTariffs: Dispatch<SetStateAction<Tariff[]>>;
   promotions: Promotion[];
   setPromotions: Dispatch<SetStateAction<Promotion[]>>;
+  mapSize: MapSize;
+  onMapSizeChange: (changes: Partial<MapSize>) => void;
   onSave: () => void;
   onExit: () => void;
 };
@@ -611,6 +652,8 @@ function Editor({
   setTariffs,
   promotions,
   setPromotions,
+  mapSize,
+  onMapSizeChange,
   onSave,
   onExit,
 }: EditorProps) {
@@ -627,9 +670,9 @@ function Editor({
   const pointFromEvent = (event: PointerEvent<HTMLDivElement> | DragEvent<HTMLDivElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
     return snapPointToGrid({
-      x: Math.round(((event.clientX - rect.left) / rect.width) * CANVAS_WIDTH),
-      y: Math.round(((event.clientY - rect.top) / rect.height) * CANVAS_HEIGHT),
-    });
+      x: Math.round(((event.clientX - rect.left) / rect.width) * mapSize.width),
+      y: Math.round(((event.clientY - rect.top) / rect.height) * mapSize.height),
+    }, mapSize);
   };
 
   const addItem = (type: ItemType, point: Point) => {
@@ -760,7 +803,10 @@ function Editor({
             <div className="canvas-viewport">
               <div
                 className={`editor-canvas tool-${tool}`}
-                style={{ width: `${(CANVAS_WIDTH * zoom) / 100}px` }}
+                style={{
+                  width: `${(mapSize.width * zoom) / 100}px`,
+                  height: `${(mapSize.height * zoom) / 100}px`,
+                }}
                 ref={canvasRef}
                 onClick={(event) => {
                   if (tool !== "select" && tool !== "wall") addItem(tool, pointFromEvent(event));
@@ -801,7 +847,7 @@ function Editor({
                   }
                 }}
               >
-                <svg className="wall-layer" viewBox={`0 0 ${CANVAS_WIDTH} ${CANVAS_HEIGHT}`}>
+                <svg className="wall-layer" viewBox={`0 0 ${mapSize.width} ${mapSize.height}`}>
                   {walls.map((wall) => (
                     <polyline
                       points={wall.points.map((point) => `${point.x},${point.y}`).join(" ")}
@@ -818,6 +864,7 @@ function Editor({
                 {items.map((item) => (
                   <MapObject
                     item={item}
+                    mapSize={mapSize}
                     editor
                     selected={selectedId === item.id}
                     onSelect={() => {
@@ -886,10 +933,41 @@ function Editor({
               ) : (
                 <div className="canvas-settings">
                   <p>Выберите объект на карте, чтобы изменить его параметры.</p>
-                  <div>
-                    <span>Размер схемы</span>
-                    <strong>1200 × 720 px</strong>
+                  <div className="map-size-controls">
+                    <label className="field">
+                      ШИРИНА, PX
+                      <input
+                        type="number"
+                        min={MAP_SIZE_LIMITS.minWidth}
+                        max={MAP_SIZE_LIMITS.maxWidth}
+                        step={1}
+                        value={mapSize.width}
+                        onChange={(event) => {
+                          if (Number.isFinite(event.currentTarget.valueAsNumber)) {
+                            onMapSizeChange({ width: event.currentTarget.valueAsNumber });
+                          }
+                        }}
+                      />
+                    </label>
+                    <label className="field">
+                      ВЫСОТА, PX
+                      <input
+                        type="number"
+                        min={MAP_SIZE_LIMITS.minHeight}
+                        max={MAP_SIZE_LIMITS.maxHeight}
+                        step={1}
+                        value={mapSize.height}
+                        onChange={(event) => {
+                          if (Number.isFinite(event.currentTarget.valueAsNumber)) {
+                            onMapSizeChange({ height: event.currentTarget.valueAsNumber });
+                          }
+                        }}
+                      />
+                    </label>
                   </div>
+                  <p className="map-size-limit">
+                    Диапазон: {MAP_SIZE_LIMITS.minWidth}–{MAP_SIZE_LIMITS.maxWidth} × {MAP_SIZE_LIMITS.minHeight}–{MAP_SIZE_LIMITS.maxHeight} px
+                  </p>
                   <div>
                     <span>Объектов</span>
                     <strong>{items.length}</strong>

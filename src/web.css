@@ -377,6 +377,11 @@ p {
   color: #8dbf2b;
 }
 
+.map-object.computer .pc-time {
+  font-size: clamp(8px, 0.75vw, 12px);
+  line-height: 1.15;
+}
+
 .map-object:not(.computer) {
   width: 8%;
   grid-template-columns: 1fr;
@@ -877,6 +882,26 @@ p {
   display: flex;
   align-items: center;
   justify-content: space-between;
+}
+
+.canvas-settings .map-size-controls {
+  min-height: 0;
+  margin-top: 14px;
+  border-top: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: start;
+  gap: 8px;
+}
+
+.canvas-settings .map-size-controls .field input {
+  width: 100%;
+}
+
+.canvas-settings .map-size-limit {
+  margin: 9px 0 12px;
+  color: #555;
+  font-size: 8px;
 }
 
 .canvas-settings span {
